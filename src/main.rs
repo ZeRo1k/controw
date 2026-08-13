@@ -332,10 +332,6 @@ fn create_xbox_controller(
         }
     }
 
-    println!(
-        "[+] [P{}] Virtual Xbox 360 controller connected via ViGEmBus (Rumble Active)",
-        player_id
-    );
 
     Some(target)
 }
