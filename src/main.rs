@@ -997,6 +997,13 @@ const CONTROLLER_HTML: &str = r##"
     user-select: none;
     -webkit-user-select: none;
     touch-action: none;
+    /* iOS Safari's long-press callout (copy/share bubble) and native image/
+       link drag can hijack an in-progress touch - most relevantly during the
+       1s triple-tap-and-hold turbo gesture - without reliably firing
+       pointercancel afterward, which is another way a button can end up
+       stuck "pressed" with no release event ever arriving. */
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
 }
 
 html, body {
@@ -1682,6 +1689,7 @@ html, body {
         lastPacketTime: 0,
         reconnectDelay: 250,
         reconnectTimer: null,
+        resyncTimer: null,
         lastServerPong: 0,
         consecutiveSends: 0,
         lastInputAt: performance.now(),
@@ -1756,6 +1764,33 @@ html, body {
 
     const $ = (s, root = document) => root.querySelector(s);
     const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+
+    // --- Stuck-input safety net -------------------------------------------
+    // On mobile, a touch sequence can be abandoned by the OS/browser without
+    // ever firing pointerup/pointercancel/lostpointercapture: app-switch
+    // gestures, the notification shade, a screen lock, or (on some Android
+    // browsers) a long-press context menu can all swallow the "finger up"
+    // signal. When that happens, the per-element `activePointerId` closure
+    // variable in bindButton/bindDpad/bindJoystick never gets cleared, so
+    // the button/stick looks permanently pressed AND, because the "already
+    // pressed" guard stays tripped, the very next real tap on it is ignored
+    // ("doesn't click at all"). Every press/drag handler below registers a
+    // no-argument release callback here; we force-fire all of them the
+    // moment the page loses focus or visibility so nothing can get stuck.
+    const heldInputs = new Set();
+
+    function releaseAllHeldInputs() {
+        for (const release of heldInputs) {
+            try { release(); } catch (e) {}
+        }
+        heldInputs.clear();
+    }
+
+    window.addEventListener("blur", releaseAllHeldInputs);
+    window.addEventListener("pagehide", releaseAllHeldInputs);
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) releaseAllHeldInputs();
+    });
 
     // === ADD THIS RIGHT AFTER const state = { ... } ===
 let vibrationUnlocked = false;
@@ -2017,6 +2052,7 @@ function setConnection(connected, playerId = null) {
         if (playerId !== null && playerId !== undefined) state.playerId = Number(playerId);
         if (!connected) state.playerId = null;
         if (connected) Haptics.playDualRumble(0.5, 0.5, 60);
+        if (connected) startStateResync(); else stopStateResync();
         updatePillLabel();
     }
 
@@ -2308,9 +2344,17 @@ function setConnection(connected, playerId = null) {
         if (!state.stateDirty) return;
         state.stateDirty = false;
         state.lastSentAt = now;
+        encodeAndSendState();
+    }
+
+    // Builds a packet from whatever is currently in `state` and sends it
+    // right now, unconditionally - no dirty check, no throttle. Used both by
+    // sendBinaryState() above (for real, immediate input changes) and by the
+    // resync heartbeat below (for periodic self-healing).
+    function encodeAndSendState() {
         state.packetSeq = (state.packetSeq + 1) & 0xFFFF;
 
-            const buffer = new ArrayBuffer(12);
+        const buffer = new ArrayBuffer(12);
         const view = new DataView(buffer);
 
         view.setUint8(0, state.playerId);
@@ -2324,8 +2368,44 @@ function setConnection(connected, playerId = null) {
         view.setInt8(10, Math.round(state.stickState.rx * 127));
         view.setInt8(11, Math.round(state.stickState.ry * 127));
 
-        try { state.ws.send(buffer); } catch (_) {}
+        try {
+            state.ws.send(buffer);
+        } catch (_) {
+            // The socket is already broken (e.g. a close race). Don't wait
+            // out the full ping/pong timeout to notice - close it now so the
+            // existing reconnect logic kicks in immediately and a correct
+            // state gets pushed the moment we're back online.
+            try { state.ws.close(); } catch (_) {}
+        }
     }
+
+    // Re-sends the full current button/stick state on a fixed interval,
+    // independent of whether anything actually changed. WebSocket delivery
+    // is reliable and ordered within a connection, but a frame can still go
+    // missing across edge cases outside our control (a reconnect landing
+    // mid-send, a backgrounded tab's socket getting torn down, a dropped
+    // browser event that never called sendBinaryState at all, etc). Because
+    // every packet carries the *complete* state rather than a diff, the very
+    // next heartbeat corrects any such gap by itself - no extra user input
+    // needed, and far faster than waiting on the multi-second server
+    // watchdog to notice and neutralize the controller.
+    const STATE_RESYNC_INTERVAL_MS = 200;
+
+    function startStateResync() {
+        stopStateResync();
+        state.resyncTimer = setInterval(() => {
+            if (!state.ws || state.ws.readyState !== WebSocket.OPEN || !state.playerId) return;
+            encodeAndSendState();
+        }, STATE_RESYNC_INTERVAL_MS);
+    }
+
+    function stopStateResync() {
+        if (state.resyncTimer) {
+            clearInterval(state.resyncTimer);
+            state.resyncTimer = null;
+        }
+    }
+
 
     function connect() {
         try {
@@ -2477,15 +2557,35 @@ function setConnection(connected, playerId = null) {
         };
 
         const press = e => {
-            // Ignore duplicate/non-primary pointer streams. A single physical
-            // touch must produce exactly one press event.
-            if (activePointerId !== null) return;
             if (e.pointerType === "mouse" && e.button !== 0) return;
+
+            if (activePointerId !== null) {
+                // A new pointerdown is landing on this button while we still
+                // think a previous one is down. Some browsers/OSes reuse the
+                // same pointerId for a brand-new touch (iOS Safari in
+                // particular often keeps a stable id across sequential single
+                // touches), so an id match here does NOT reliably mean "this
+                // is a duplicate event for the same still-active touch" - it
+                // can just as easily be a genuinely new tap whose id
+                // collided with a stale one we never got a release for.
+                // Always self-heal: force-release the stale state before
+                // handling this press as new. Re-applying release() when it
+                // truly was a harmless duplicate is a no-op in practice
+                // (button was already pressed, bit already true), so there's
+                // no downside to healing unconditionally.
+                release();
+            }
 
             e.preventDefault();
             e.stopPropagation();
             activePointerId = e.pointerId;
-            el.setPointerCapture?.(e.pointerId);
+            // setPointerCapture can throw (e.g. invalid/expired pointerId on a
+            // very fast tap). If it throws unguarded, everything below never
+            // runs, leaving activePointerId set with no matching visual state
+            // or release path - exactly the "stuck + unresponsive" bug. Guard
+            // it so a capture failure can't abort the rest of the press.
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+            heldInputs.add(release);
 
             const now = Date.now();
 
@@ -2513,11 +2613,17 @@ function setConnection(connected, playerId = null) {
             }
         };
 
+        // `e` is omitted when this is force-called from releaseAllHeldInputs
+        // (page lost focus/visibility mid-press) - in that case release
+        // unconditionally instead of checking against a specific pointerId.
         const release = e => {
-            if (activePointerId !== e.pointerId) return;
-            e.preventDefault();
-            e.stopPropagation();
+            if (e) {
+                if (activePointerId !== e.pointerId) return;
+                e.preventDefault();
+                e.stopPropagation();
+            }
             activePointerId = null;
+            heldInputs.delete(release);
             el.classList.remove("pressed");
 
             if (holdTimer) {
@@ -2632,9 +2738,15 @@ function setConnection(connected, playerId = null) {
             applyDirections(directionFromPoint(e.clientX, e.clientY));
         };
 
+        // `e` is omitted when force-called from releaseAllHeldInputs.
         const end = e => {
-            if (activePointerId !== e.pointerId) return;
-            e.preventDefault();
+            if (e) {
+                if (activePointerId !== e.pointerId) return;
+                e.preventDefault();
+            }
+
+            activePointerId = null;
+            heldInputs.delete(end);
 
             for (const direction of activeDirections) {
                 setButtonBit(direction, false);
@@ -2642,18 +2754,23 @@ function setConnection(connected, playerId = null) {
             }
 
             activeDirections.clear();
-            activePointerId = null;
             sendBinaryState(true);
         };
 
         el.addEventListener("pointerdown", e => {
-            if (activePointerId !== null) return;
+            if (activePointerId !== null) {
+                // Same reasoning as bindButton's press(): an id match doesn't
+                // reliably prove this is the same still-active touch, so
+                // always self-heal rather than trusting the id.
+                end();
+            }
 
             e.preventDefault();
             e.stopPropagation();
 
             activePointerId = e.pointerId;
-            el.setPointerCapture?.(e.pointerId);
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+            heldInputs.add(end);
             applyDirections(directionFromPoint(e.clientX, e.clientY));
         });
 
@@ -2707,9 +2824,17 @@ function setConnection(connected, playerId = null) {
             animationFrame = requestAnimationFrame(() => processMove(x, y));
         };
 
-        const end = e => {
-            if (!state.joystickActive.has(e.pointerId)) return;
-            state.joystickActive.delete(e.pointerId);
+        // `pointerId` is omitted when force-called from releaseAllHeldInputs;
+        // in that case release whichever pointer this stick currently thinks
+        // is active instead of matching a specific id.
+        const end = (e, pointerId = e?.pointerId) => {
+            if (pointerId === undefined) {
+                if (state.joystickActive.size === 0) return;
+                [pointerId] = state.joystickActive.keys();
+            }
+            if (!state.joystickActive.has(pointerId)) return;
+            state.joystickActive.delete(pointerId);
+            heldInputs.delete(releaseThisStick);
             if (animationFrame) cancelAnimationFrame(animationFrame);
             if ((stick === "right" && state.gyroModeIndex !== 2) ||
                 (stick === "left" && state.gyroModeIndex !== 1)) {
@@ -2727,13 +2852,15 @@ function setConnection(connected, playerId = null) {
                     state.stickState.ly = 0;
                 }
             }
-            sendBinaryState();
+            sendBinaryState(true);
         };
+        const releaseThisStick = () => end(undefined);
 
         el.addEventListener("pointerdown", e => {
             e.preventDefault();
-            el.setPointerCapture?.(e.pointerId);
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
             state.joystickActive.set(e.pointerId, true);
+            heldInputs.add(releaseThisStick);
             move(e);
         });
         el.addEventListener("pointermove", move);
