@@ -141,9 +141,7 @@ impl Drop for PlayerController {
         if let Some(mut target) = self.xbox.take() {
             if let Err(e) = target.unplug() {
                 eprintln!("[!] [P{}] Failed to unplug virtual Xbox controller: {:?}", self.player_id, e);
-            } else {
-                println!("[-] [P{}] Virtual Xbox controller cleanly unplugged from ViGEmBus", self.player_id);
-            }
+            } 
         }
     }
 }
@@ -327,7 +325,7 @@ fn create_xbox_controller(
                 },
             );
 
-            println!("[+] [P{}] Rumble notifications enabled", player_id);
+            
         }
         Err(e) => {
             eprintln!("[!] [P{}] Failed to request rumble notifications: {:?}", player_id, e);
