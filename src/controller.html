@@ -1,0 +1,2206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b1b1b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Controw</title>
+<style>
+:root {
+    --u: min(1dvh, 0.55vw);              /* base unit: everything scales with the screen */
+    --bg-color: #1b1b1b;
+    --btn-fill: #6e6e6e;
+    --btn-border: #363636;
+    --btn-text: #1a1a1a;
+    --knob-bg: #6e6e6e;
+    --stick-outer: #2c2c2c;
+    --stick-border: #444444;
+    --bw: max(2px, calc(var(--u) * 0.9));
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+}
+
+html, body {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100dvh;
+    overflow: hidden;
+    background-color: var(--bg-color);
+    color: var(--btn-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.controller-stage {
+    position: relative;
+    width: 100vw; height: 100dvh;
+    overflow: hidden;
+    background: var(--stage-bg, var(--bg-color));
+}
+#ctlLayer { position: absolute; inset: 0; }
+
+/* ===== THEMES ===== */
+.theme-glass {
+    --bg-color: #111111; --stage-bg: linear-gradient(160deg, #111 0%, #1a1a2e 50%, #111 100%);
+    --btn-fill: rgba(255,255,255,0.08); --btn-border: rgba(255,255,255,0.22); --btn-text: rgba(255,255,255,0.75);
+    --knob-bg: rgba(255,255,255,0.14); --stick-outer: rgba(255,255,255,0.05); --stick-border: rgba(255,255,255,0.18);
+}
+.theme-gameboy {
+    --bg-color: #9bbc0f; --btn-fill: #306230; --btn-border: #0f380f; --btn-text: #9bbc0f;
+    --knob-bg: #306230; --stick-outer: #8bac0f; --stick-border: #0f380f;
+}
+.theme-light {
+    --bg-color: #e8e8ec; --btn-fill: #ffffff; --btn-border: #b9b9c4; --btn-text: #2b2b33;
+    --knob-bg: #ffffff; --stick-outer: #d4d4dc; --stick-border: #b0b0bc;
+}
+.theme-neon {
+    --bg-color: #07070d; --btn-fill: #10131f; --btn-border: #00e5ff; --btn-text: #00e5ff;
+    --knob-bg: #10131f; --stick-outer: #0a0c15; --stick-border: #ff2bd6;
+}
+.theme-midnight {
+    --bg-color: #0b1020; --btn-fill: #243256; --btn-border: #131c36; --btn-text: #cfe0ff;
+    --knob-bg: #2c3d6a; --stick-outer: #131b33; --stick-border: #2a3a66;
+}
+.theme-crimson {
+    --bg-color: #1a0b0d; --btn-fill: #7a1f2a; --btn-border: #3b0f15; --btn-text: #ffd9dc;
+    --knob-bg: #8f2733; --stick-outer: #2a1215; --stick-border: #55222a;
+}
+.theme-neon .cbtn, .theme-neon .dpad-btn { box-shadow: 0 0 8px rgba(0,229,255,.55), inset 0 0 6px rgba(0,229,255,.25); }
+.theme-neon .stick-outer { box-shadow: 0 0 10px rgba(255,43,214,.5), inset 0 0 12px rgba(255,43,214,.2); }
+
+/* ===== CONTROL BASE ===== */
+.ctl {
+    position: absolute;
+    z-index: 5;
+    translate: -50% -50%;
+    scale: calc(var(--s, 1) * var(--press, 1));
+    opacity: var(--ui-opacity, 1);
+    transition: scale 0.05s ease;
+}
+
+.cbtn {
+    border: var(--bw) solid var(--btn-border);
+    background-color: var(--fill, var(--btn-fill));
+    background-image: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(0,0,0,0.14));
+    color: var(--ink, var(--btn-text));
+    font-weight: 900;
+    font-size: calc(var(--u) * 5);
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: inset 0 2px 3px rgba(255,255,255,0.18), 0 4px 8px rgba(0,0,0,0.5);
+    transition: filter 0.05s ease, border-color 0.1s ease;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.theme-glass .cbtn { background-image: none; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 0 1px rgba(255,255,255,0.3), inset 0 1px 2px rgba(255,255,255,0.08); }
+.theme-gameboy .cbtn, .theme-light .cbtn { background-image: none; }
+.ctl.cbtn { width: calc(var(--u) * 15); height: calc(var(--u) * 15); }
+.shape-round { border-radius: 50%; }
+.shape-square { border-radius: 20%; }
+.shape-wide { border-radius: 999px; }
+.ctl.cbtn.shape-wide { width: calc(var(--u) * 26); height: calc(var(--u) * 12); }
+.fbtn.shape-wide { border-radius: 999px; }
+.cbtn svg { width: 55%; height: 55%; fill: currentColor; }
+.cbtn.long { font-size: calc(var(--u) * 3.6); }
+
+.ctl.pressed { --press: 0.92; }
+.cbtn.pressed { filter: brightness(0.72); }
+.cbtn.latched { border-color: #ffd23f !important; box-shadow: 0 0 14px #ffd23f, inset 0 0 8px #ffd23f !important; }
+.cbtn.turbo-active { border-color: #ff9500 !important; box-shadow: 0 0 16px #ff9500, inset 0 0 8px #ff9500 !important; animation: turboPulse 0.1s infinite alternate; }
+@keyframes turboPulse { 0% { filter: brightness(1.3); } 100% { filter: brightness(0.85); } }
+
+/* face-button default accent colours (default theme only; a custom colour wins) */
+.theme-default .cbtn[data-map="Y"] { --ink: #ffd23f; }
+.theme-default .cbtn[data-map="X"] { --ink: #5db2ff; }
+.theme-default .cbtn[data-map="B"] { --ink: #ff6b5e; }
+.theme-default .cbtn[data-map="A"] { --ink: #55e070; }
+.theme-default .cbtn[data-map] { text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+
+/* ===== D-PAD ===== */
+.ctl.dpad { width: calc(var(--u) * 36); height: calc(var(--u) * 36); }
+.dpad-btn {
+    position: absolute;
+    background-color: var(--btn-fill);
+    border: var(--bw) solid var(--btn-border);
+    box-shadow: inset 0 2px 3px rgba(255,255,255,0.18), 0 4px 8px rgba(0,0,0,0.4);
+    cursor: pointer;
+}
+.dpad-btn.pressed { filter: brightness(0.7); transform: scale(0.92); }
+.dpad-up    { top: 0; left: 32%; width: 36%; height: 36%; border-radius: 42% 42% 14% 14%; }
+.dpad-down  { bottom: 0; left: 32%; width: 36%; height: 36%; border-radius: 14% 14% 42% 42%; }
+.dpad-left  { top: 32%; left: 0; width: 36%; height: 36%; border-radius: 42% 14% 14% 42%; }
+.dpad-right { top: 32%; right: 0; width: 36%; height: 36%; border-radius: 14% 42% 42% 14%; }
+.dpad-center { position: absolute; top: 32%; left: 32%; width: 36%; height: 36%; background-color: var(--btn-fill); border: var(--bw) solid var(--btn-border); border-radius: 14%; pointer-events: none; }
+.theme-glass .dpad-btn, .theme-glass .dpad-center { background-color: rgba(255,255,255,0.06); backdrop-filter: blur(10px); }
+
+/* ===== STICKS ===== */
+.ctl.stick { width: calc(var(--u) * 38); height: calc(var(--u) * 38); }
+.stick-outer {
+    width: 100%; height: 100%; border-radius: 50%;
+    background-color: var(--stick-outer);
+    border: var(--bw) solid var(--stick-border);
+    box-shadow: inset 0 4px 10px rgba(0,0,0,0.6);
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+}
+.stick-knob {
+    width: 50%; height: 50%; border-radius: 50%;
+    background-color: var(--fill, var(--knob-bg));
+    border: var(--bw) solid #222;
+    box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.6);
+    position: absolute;
+    transition: transform 0.04s linear;
+}
+.theme-glass .stick-outer { backdrop-filter: blur(8px); }
+
+/* ===== FACE CLUSTERS ===== */
+.ctl.face { position: absolute; }
+.face-diamond, .face-gc { width: calc(var(--u) * 38); height: calc(var(--u) * 38); }
+.face-diamond .fbtn { position: absolute; width: 36%; height: 36%; font-size: calc(var(--u) * 5.5); }
+.face-diamond .f0 { top: 0; left: 32%; }
+.face-diamond .f1 { top: 32%; left: 0; }
+.face-diamond .f2 { top: 32%; right: 0; }
+.face-diamond .f3 { bottom: 0; left: 32%; }
+.face-gc .fbtn { position: absolute; }
+.face-gc .f0 { width: 48%; height: 48%; top: 26%; left: 26%; font-size: calc(var(--u) * 7); }
+.face-gc .f1 { width: 28%; height: 28%; top: 62%; left: 0; }
+.face-gc .f2 { width: 34%; height: 26%; top: 4%; left: 58%; border-radius: 30%; }
+.face-gc .f3 { width: 26%; height: 34%; top: 28%; left: 78%; border-radius: 30%; }
+.face-row, .face-grid { display: grid; gap: calc(var(--u) * 2); }
+.face-row { grid-auto-flow: column; grid-auto-columns: calc(var(--u) * 15); }
+.face-grid { grid-template-columns: repeat(3, calc(var(--u) * 15)); }
+.face-row .fbtn, .face-grid .fbtn { width: calc(var(--u) * 15); height: calc(var(--u) * 15); font-size: calc(var(--u) * 5); }
+.face-row.nudge .f0 { transform: translateY(calc(var(--u) * 3)); }
+.fbtn { border: var(--bw) solid var(--btn-border); }
+
+/* ===== TOUCHPAD ===== */
+.ctl.touchpad {
+    width: calc(var(--u) * 44); height: calc(var(--u) * 30);
+    border-radius: calc(var(--u) * 3);
+    background: var(--btn-fill); border: var(--bw) solid var(--btn-border);
+    box-shadow: inset 0 3px 10px rgba(0,0,0,.35);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--btn-text); opacity: calc(var(--ui-opacity, 1) * .9);
+    font-weight: 800; font-size: calc(var(--u) * 3.6); letter-spacing: .1em;
+}
+.ctl.touchpad.pressed { --press: 1; filter: brightness(1.15); }
+
+/* ===== PLAYER PILL ===== */
+.player-pill {
+    position: absolute; z-index: 30;
+    width: 44px; height: 44px; padding: 0; border-radius: 50%;
+    background-color: #2b2b2b; border: 2px solid #444; color: #dedede;
+    font-weight: 900; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    cursor: pointer;
+    transition: left .15s ease, top .15s ease, background-color .15s ease, border-color .15s ease, transform .1s ease;
+}
+.player-pill:active { transform: scale(0.93); }
+.player-pill::after {
+    content: ""; position: absolute; right: -2px; bottom: -2px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #e5534b; border: 2px solid #1b1b1b;
+}
+.player-pill.connected::after { background: #4cd964; }
+.player-pill.gyro-1 { border-color: #5db2ff; box-shadow: 0 0 10px #5db2ff; }
+.player-pill.gyro-2 { border-color: #ffb347; box-shadow: 0 0 10px #ffb347; }
+
+/* ===== MENU BUTTON ===== */
+.menu-btn {
+    position: absolute; top: max(5px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 999px;
+    background: rgba(60,60,60,0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(255,255,255,0.14); color: #ddd;
+    font-weight: 700; font-size: 12px; letter-spacing: .3px; cursor: pointer; z-index: 40; white-space: nowrap;
+    max-width: 44vw; overflow: hidden; text-overflow: ellipsis;
+}
+.menu-btn:active { transform: translateX(-50%) scale(0.94); }
+.menu-btn svg { width: 14px; height: 14px; fill: currentColor; flex-shrink: 0; }
+
+.rotate-hint {
+    position: fixed; inset: 0; z-index: 500; display: none; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10,10,10,.94); color: #ddd; font: 700 16px/1.4 -apple-system, "Segoe UI", sans-serif; text-align: center; gap: 10px;
+}
+.rotate-hint .ico { font-size: 44px; }
+@media (orientation: portrait) { body:not(.editing) .rotate-hint { display: flex; } }
+
+/* ===== TOAST ===== */
+.toast {
+    position: fixed; left: 50%; bottom: 16px; transform: translate(-50%, 20px);
+    background: rgba(20,20,20,.92); color: #fff; padding: 8px 16px; border-radius: 999px;
+    font: 600 13px/1.2 -apple-system, "Segoe UI", Roboto, sans-serif;
+    border: 1px solid rgba(255,255,255,.15);
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 600;
+    max-width: 90vw; text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ===== SHEET (menu) ===== */
+.sheet {
+    position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    color: #eee; font: 500 14px/1.3 -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.sheet[hidden] { display: none; }
+.sheet-panel {
+    width: min(780px, 100%); max-height: 100%; display: flex; flex-direction: column;
+    background: #202124; border: 1px solid rgba(255,255,255,.12); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6); overflow: hidden;
+}
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); font-weight: 800; font-size: 15px; }
+.sheet-body { overflow-y: auto; padding: 8px 14px 14px; }
+.sheet-body, .sheet-body * { touch-action: pan-y; }
+.sheet button, .sheet input, .sheet textarea, .sheet select { touch-action: manipulation; }
+.sheet h4 { margin: 12px 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa0a6; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.chip, .sheet button {
+    font: inherit; color: #eee; background: #2f3033; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px; padding: 8px 10px; cursor: pointer; text-align: center;
+}
+.chip.active { background: #1f6f3a; border-color: #4cd964; color: #fff; }
+.sheet button:active, .chip:active { filter: brightness(1.3); }
+.sheet button.primary { background: #2b6cd4; border-color: #5b9bff; }
+.sheet button.danger { background: #6b2a28; border-color: #c0463f; }
+.sheet button.icon { padding: 4px 10px; }
+.custom-row { display: flex; align-items: center; gap: 6px; background: #2a2b2e; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 6px 8px; }
+.custom-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; cursor: pointer; padding: 4px; }
+.custom-row.active { border-color: #4cd964; }
+.custom-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sheet textarea, .sheet input[type=text] {
+    width: 100%; background: #111; color: #eee; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; padding: 8px; font: 12px/1.3 ui-monospace, Consolas, monospace;
+    -webkit-user-select: text; user-select: text;
+}
+.sheet textarea { height: 90px; resize: none; }
+.empty { color: #777; font-size: 13px; padding: 4px 0 8px; }
+.opt { display: flex; align-items: center; gap: 8px; width: 100%; }
+.opt span { min-width: 120px; }
+.opt input[type=range] { flex: 1; accent-color: #4cd964; }
+
+/* ===== LAYOUT EDITOR ===== */
+.editor-bar {
+    position: fixed; left: 50%; transform: translateX(-50%); top: max(6px, env(safe-area-inset-top));
+    z-index: 250; width: min(860px, calc(100vw - 12px));
+    background: rgba(24,25,27,.95); border: 1px solid rgba(255,255,255,.15); border-radius: 14px;
+    padding: 6px 8px; color: #eee; font: 600 12px/1.2 -apple-system, "Segoe UI", Roboto, sans-serif;
+    box-shadow: 0 8px 30px rgba(0,0,0,.6);
+    display: flex; flex-direction: column; gap: 6px; max-height: 70dvh; overflow-y: auto;
+}
+.editor-bar.dock-bottom { top: auto; bottom: max(6px, env(safe-area-inset-bottom)); }
+.editor-bar[hidden] { display: none; }
+.editor-bar, .editor-bar * { touch-action: manipulation; }
+.editor-bar .erow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.editor-bar button, .editor-bar select {
+    font: inherit; color: #eee; background: #34363a; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer;
+}
+.editor-bar button.primary { background: #2b6cd4; border-color: #5b9bff; }
+.editor-bar button.danger { background: #6b2a28; border-color: #c0463f; }
+.editor-bar button.on { background: #1f6f3a; border-color: #4cd964; }
+.editor-bar button:disabled, .editor-bar select:disabled, .editor-bar input:disabled { opacity: .4; }
+.editor-bar input[type=text] {
+    flex: 1; min-width: 80px; background: #111; color: #eee; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; padding: 6px 8px; font: inherit; -webkit-user-select: text; user-select: text;
+}
+.editor-bar input.short { flex: 0 0 70px; min-width: 0; }
+.editor-bar input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; background: none; }
+.editor-bar input[type=range] { flex: 1; min-width: 80px; accent-color: #4cd964; }
+.editor-bar .sel-name { min-width: 80px; color: #4cd964; }
+.editor-bar .hint { color: #9aa0a6; font-weight: 500; }
+.editor-bar.collapsed .erow.extra { display: none; }
+.editor-bar label.chk { display: flex; align-items: center; gap: 4px; }
+
+.editing .ctl { pointer-events: none !important; }
+.editing .player-pill, .editing .menu-btn { display: none !important; }
+.editing .controller-stage {
+    background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+    background-size: 5% 5%;
+}
+.editing .ctl-selected { outline: 2px dashed #4cd964; outline-offset: 5px; }
+</style>
+</head>
+<body>
+<div class="controller-stage theme-default" id="controllerStage">
+    <div id="ctlLayer"></div>
+
+    <div id="themeSwitcher" class="menu-btn" role="button" title="Menu: layouts, editor, options">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+        <span id="themeLabel">Layout</span>
+    </div>
+
+    <div id="playerPill" class="player-pill" title="Player slot. Tap to cycle gyro: off / left stick / right stick">
+        <span id="playerLabel">&mdash;</span>
+    </div>
+</div>
+
+<div class="rotate-hint"><div class="ico">&#8635;</div><div>Rotate your phone to landscape</div></div>
+<div id="toast" class="toast"></div>
+
+<div id="sheet" class="sheet" hidden>
+    <div class="sheet-panel">
+        <div class="sheet-head"><span>Controller menu</span><button id="sheetClose" class="icon">&#10005;</button></div>
+        <div class="sheet-body">
+            <h4>My layouts</h4>
+            <div id="customList" class="custom-list"></div>
+            <div class="row">
+                <button id="newLayout" class="primary">+ New layout from current</button>
+                <button id="importBtn">Import</button>
+            </div>
+            <div id="ioPanel" hidden style="margin-top:8px">
+                <textarea id="ioText" spellcheck="false" placeholder="Paste layout JSON here"></textarea>
+                <div class="row" style="margin-top:6px">
+                    <button id="ioApply" class="primary">Import pasted layout</button>
+                    <button id="ioClose">Close</button>
+                </div>
+            </div>
+
+            <h4>Presets</h4>
+            <div id="presetGrid" class="grid"></div>
+
+            <h4>Options</h4>
+            <div class="row">
+                <button id="optGyro">Gyro: Off</button>
+                <button id="optHaptics">Haptics: On</button>
+                <button id="optFullscreen">Fullscreen</button>
+                <button id="optReconnect">Reconnect</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+                <label class="opt"><span>Stick sensitivity</span><input id="optStickSens" type="range" min="50" max="200" value="100"><b id="optStickSensVal">100%</b></label>
+                <label class="opt"><span>Gyro sensitivity</span><input id="optGyroSens" type="range" min="40" max="250" value="100"><b id="optGyroSensVal">100%</b></label>
+                <label class="opt"><span>Mouse speed</span><input id="optMouseSens" type="range" min="40" max="300" value="100"><b id="optMouseSensVal">100%</b></label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="editorBar" class="editor-bar" hidden>
+    <div class="erow">
+        <input id="edName" type="text" maxlength="40" placeholder="Layout name">
+        <select id="edTheme" title="Theme"></select>
+        <button id="edUndo" title="Undo last change">Undo</button>
+        <button id="edSnap" class="on">Snap</button>
+        <button id="edCollapse" title="Show/hide tools">&#8645;</button>
+        <button id="edCancel" class="danger">Cancel</button>
+        <button id="edSave" class="primary">Save</button>
+    </div>
+    <div class="erow extra">
+        <span class="sel-name" id="edSel">Tap a control</span>
+        <button id="edMinus">&minus;</button>
+        <input id="edSize" type="range" min="35" max="320" value="100">
+        <button id="edPlus">+</button>
+        <span id="edSizeVal">100%</span>
+        <button id="edDup">Duplicate</button>
+        <button id="edDel" class="danger">Delete</button>
+    </div>
+    <div class="erow extra" id="edProps"></div>
+    <div class="erow extra">
+        <select id="edAdd" title="Add a control"></select>
+        <span>Opacity</span><input id="edOpacity" type="range" min="25" max="100" value="100">
+        <span class="hint">Drag controls to move them.</span>
+    </div>
+</div>
+
+<script>
+(() => {
+    const $ = (s, root = document) => root.querySelector(s);
+    const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    const round1 = v => Math.round(v * 10) / 10;
+    const stage = $("#controllerStage");
+    const layer = $("#ctlLayer");
+
+    const state = {
+        ws: null, connected: false, playerId: null,
+        pingTimer: null, packetSeq: 0, buttonStateMask: 0,
+        leftTrigger: 0, rightTrigger: 0,
+        stickState: { lx: 0, ly: 0, rx: 0, ry: 0 },
+        gyroModeIndex: 0, gyroCalibratedGamma: null, gyroCalibratedBeta: null,
+        gyroEnabled: false, gyroReady: false, gyroLastTime: 0, gyroSmoothX: 0, gyroSmoothY: 0,
+        gyroSensorSource: "none", gyroSensorSeen: false,
+        sendScheduled: false, stateDirty: false, lastSentAt: 0,
+        reconnectDelay: 250, reconnectTimer: null, resyncTimer: null,
+        lastServerPong: 0, lastServerPongSent: 0, lastInputAt: performance.now(),
+        serverLatencyMs: 0, inputHz: 120, connectionEpoch: 0,
+    };
+
+    // ---------------------------------------------------------------- settings
+    const LS_SETTINGS = "controw-settings";
+    const settings = { haptics: true, gyroSens: 1, stickSens: 1, mouseSens: 1 };
+    try {
+        const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}");
+        if (typeof s.haptics === "boolean") settings.haptics = s.haptics;
+        for (const k of ["gyroSens", "stickSens", "mouseSens"]) if (Number.isFinite(s[k])) settings[k] = clamp(s[k], 0.3, 3);
+    } catch (e) {}
+    function saveSettings() { try { localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); } catch (e) {} }
+
+    // -------------------------------------------------------------------- toast
+    let toastTimer = null;
+    function toast(msg) {
+        const t = $("#toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+    }
+
+    // ------------------------------------------------------ stuck-input safety
+    // Every press/drag handler registers a release callback here; we force-fire
+    // all of them when the page loses focus so nothing can stay stuck down.
+    const heldInputs = new Set();
+    function releaseAllHeldInputs() {
+        for (const release of [...heldInputs]) { try { release(); } catch (e) {} }
+        heldInputs.clear();
+    }
+    window.addEventListener("blur", releaseAllHeldInputs);
+    window.addEventListener("pagehide", releaseAllHeldInputs);
+
+    // ------------------------------------------------------------------ haptics
+    let vibrationUnlocked = false;
+    const pendingRumble = { weak: 0, strong: 0, duration: 0, active: false };
+    const activeGameRumble = { weak: 0, strong: 0 };
+    let rumbleLoopTimer = null;
+    let rumbleGeneration = 0;
+    const RUMBLE_TICK_MS = 45;
+    let lastHapticAt = 0;
+
+    function stopGameRumble() {
+        activeGameRumble.weak = 0; activeGameRumble.strong = 0;
+        rumbleGeneration++;
+        if (rumbleLoopTimer) { clearInterval(rumbleLoopTimer); rumbleLoopTimer = null; }
+        try { if ("vibrate" in navigator) navigator.vibrate(0); } catch (_) {}
+    }
+    function startGameRumble(weak, strong) {
+        activeGameRumble.weak = clamp(weak, 0, 1);
+        activeGameRumble.strong = clamp(strong, 0, 1);
+        const generation = ++rumbleGeneration;
+        if (rumbleLoopTimer) clearInterval(rumbleLoopTimer);
+        const tick = () => {
+            if (generation !== rumbleGeneration) return;
+            const w = activeGameRumble.weak, st = activeGameRumble.strong;
+            if (w <= 0 && st <= 0) { stopGameRumble(); return; }
+            Haptics.playDualRumble(w, st, RUMBLE_TICK_MS + 25, true);
+        };
+        tick();
+        rumbleLoopTimer = setInterval(tick, RUMBLE_TICK_MS);
+    }
+    const unlockVibration = () => {
+        if (vibrationUnlocked) return;
+        vibrationUnlocked = true;
+        if (pendingRumble.active) {
+            Haptics.playDualRumble(pendingRumble.weak, pendingRumble.strong, pendingRumble.duration);
+            pendingRumble.active = false;
+        }
+    };
+    window.addEventListener("pointerdown", unlockVibration, { passive: true, once: true });
+    window.addEventListener("touchstart", unlockVibration, { passive: true, once: true });
+
+    const Haptics = {
+        playDualRumble(weak = 0.5, strong = 0.5, duration = 120, persistent = false) {
+            if (!settings.haptics) return;
+            const now = performance.now();
+            if (!persistent && now - lastHapticAt < 18 && duration < 100) return;
+            lastHapticAt = now;
+            const intensity = Math.max(weak, strong);
+            try {
+                for (const gp of (navigator.getGamepads?.() || [])) {
+                    gp?.vibrationActuator?.playEffect?.("dual-rumble", { startDelay: 0, duration, weakMagnitude: weak, strongMagnitude: strong })?.catch?.(() => {});
+                }
+            } catch (e) {}
+            if (!("vibrate" in navigator) || intensity <= 0) return;
+            if (!vibrationUnlocked) {
+                Object.assign(pendingRumble, { weak, strong, duration, active: true });
+                return;
+            }
+            try {
+                const pulse = Math.max(40, Math.min(Math.round(duration * intensity), 250));
+                navigator.vibrate(persistent ? [pulse] : (intensity > 0.55 ? [pulse, 30, pulse] : [pulse]));
+            } catch (e) {}
+        },
+        tick() { this.playDualRumble(0.3, 0.3, 30); },
+        vibrate(pattern = 20) {
+            if (!settings.haptics || !vibrationUnlocked || !("vibrate" in navigator)) return;
+            try { navigator.vibrate(pattern); } catch (e) {}
+        },
+    };
+
+    // ----------------------------------------------- fullscreen / wake / orient
+    let wakeLock = null;
+    async function requestWakeLock() {
+        if ("wakeLock" in navigator && !wakeLock) {
+            try { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener?.("release", () => { wakeLock = null; }); } catch (e) {}
+        }
+    }
+    const isLandscape = () => (screen.orientation?.type ? screen.orientation.type.startsWith("landscape") : innerWidth > innerHeight);
+    function requestFullscreenMode() {
+        const el = document.documentElement;
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        try { req?.call(el)?.catch?.(() => {}); } catch (e) {}
+    }
+    function exitFullscreenMode() {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+            try { exit?.call(document)?.catch?.(() => {}); } catch (e) {}
+        }
+    }
+    function handleOrientationChange() {
+        if (isLandscape()) requestFullscreenMode(); else exitFullscreenMode();
+    }
+    screen.orientation?.addEventListener("change", handleOrientationChange);
+    window.addEventListener("resize", handleOrientationChange);
+    window.addEventListener("orientationchange", handleOrientationChange);
+    window.addEventListener("resize", () => requestAnimationFrame(positionPlayerPill));
+    window.visualViewport?.addEventListener("resize", () => positionPlayerPill());
+
+    // Fullscreen on pointerup, never pointerdown: going fullscreen resizes the
+    // page mid-touch and the browser cancels that very first press.
+    window.addEventListener("pointerdown", requestWakeLock, { passive: true });
+    window.addEventListener("pointerup", () => { if (isLandscape()) requestFullscreenMode(); }, { passive: true });
+
+    // ------------------------------------------------------------- input engine
+    const BTN_MASKS = {
+        DPAD_UP: 0x0001, DPAD_DOWN: 0x0002, DPAD_LEFT: 0x0004, DPAD_RIGHT: 0x0008,
+        START: 0x0010, BACK: 0x0020, LS: 0x0040, RS: 0x0080,
+        LB: 0x0100, RB: 0x0200, GUIDE: 0x0400,
+        A: 0x1000, B: 0x2000, X: 0x4000, Y: 0x8000,
+    };
+
+    // A press is held on the wire for at least this long. Games poll the pad
+    // about once per frame, so a very fast tap (down+up inside one frame) was
+    // never seen: that is the "needs a double click" bug.
+    const MIN_PRESS_MS = 55;
+    const held = new Map();   // input id -> { count, at, timer, on, val }
+
+    function writeBit(id, pressed, val = 255) {
+        const mask = BTN_MASKS[id];
+        if (mask !== undefined) {
+            if (pressed) state.buttonStateMask |= mask; else state.buttonStateMask &= ~mask;
+        }
+        if (id === "LT") state.leftTrigger = pressed ? val : 0;
+        if (id === "RT") state.rightTrigger = pressed ? val : 0;
+    }
+
+    function wsSendJson(obj) {
+        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+            try { state.ws.send(JSON.stringify(obj)); } catch (_) {}
+        }
+    }
+
+    function emit(id, pressed, val) {
+        if (id.startsWith("KEY:")) wsSendJson({ type: "key", key: id.slice(4), pressed });
+        else if (id.startsWith("MOUSE:")) wsSendJson({ type: "mouse_button", button: id.slice(6), pressed });
+        else { writeBit(id, pressed, val); sendBinaryState(true); }
+    }
+
+    // val: trigger pull strength 1..255 (only used by LT / RT)
+    function inputDown(id, val = 255) {
+        let h = held.get(id);
+        if (!h) { h = { count: 0, at: 0, timer: null, on: false, val }; held.set(id, h); }
+        if (h.timer) { clearTimeout(h.timer); h.timer = null; }
+        h.count++;
+        h.val = val;
+        if (!h.on) { h.on = true; h.at = performance.now(); emit(id, true, val); }
+    }
+
+    function inputUp(id, immediate = false) {
+        const h = held.get(id);
+        if (!h || h.count <= 0) return;
+        h.count--;
+        if (h.count > 0) return;
+        const wait = MIN_PRESS_MS - (performance.now() - h.at);
+        if (!immediate && wait > 0) {
+            h.timer = setTimeout(() => { h.timer = null; if (h.count === 0) { h.on = false; emit(id, false); } }, wait);
+        } else if (h.on) {
+            h.on = false;
+            emit(id, false);
+        }
+    }
+
+    // ---------------------------------------------------------- packet sending
+    function sendBinaryState(immediate = false) {
+        if (!state.ws || state.ws.readyState !== WebSocket.OPEN || !state.playerId) return;
+        state.stateDirty = true;
+        state.lastInputAt = performance.now();
+        const now = performance.now();
+        const minInterval = 1000 / clamp(state.inputHz || 120, 60, 240);
+        if (!immediate && (now - state.lastSentAt) < minInterval) {
+            if (!state.sendScheduled) {
+                state.sendScheduled = true;
+                setTimeout(() => { state.sendScheduled = false; sendBinaryState(true); }, Math.max(0, minInterval - (now - state.lastSentAt)));
+            }
+            return;
+        }
+        if (!state.stateDirty) return;
+        state.stateDirty = false;
+        state.lastSentAt = now;
+        encodeAndSendState();
+    }
+
+    function encodeAndSendState() {
+        state.packetSeq = (state.packetSeq + 1) & 0xFFFF;
+        const buffer = new ArrayBuffer(12);
+        const view = new DataView(buffer);
+        view.setUint8(0, state.playerId);
+        view.setUint16(1, state.packetSeq);
+        view.setUint8(3, 1);
+        view.setUint16(4, state.buttonStateMask);
+        view.setUint8(6, state.leftTrigger);
+        view.setUint8(7, state.rightTrigger);
+        view.setInt8(8, Math.round(clamp(state.stickState.lx, -1, 1) * 127));
+        view.setInt8(9, Math.round(clamp(state.stickState.ly, -1, 1) * 127));
+        view.setInt8(10, Math.round(clamp(state.stickState.rx, -1, 1) * 127));
+        view.setInt8(11, Math.round(clamp(state.stickState.ry, -1, 1) * 127));
+        try { state.ws.send(buffer); } catch (_) { try { state.ws.close(); } catch (_) {} }
+    }
+
+    // Every packet carries the complete state, so re-sending on a timer heals
+    // any frame that went missing without needing more user input.
+    const STATE_RESYNC_INTERVAL_MS = 200;
+    function startStateResync() {
+        stopStateResync();
+        state.resyncTimer = setInterval(() => {
+            if (!state.ws || state.ws.readyState !== WebSocket.OPEN || !state.playerId) return;
+            encodeAndSendState();
+        }, STATE_RESYNC_INTERVAL_MS);
+    }
+    function stopStateResync() {
+        if (state.resyncTimer) { clearInterval(state.resyncTimer); state.resyncTimer = null; }
+    }
+
+    // ------------------------------------------------------------- connection
+    const clientId = (() => {
+        try {
+            let id = sessionStorage.getItem("controw-client-id");
+            if (!id) { id = "c" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); sessionStorage.setItem("controw-client-id", id); }
+            return id;
+        } catch (e) { return "c" + Math.random().toString(36).slice(2, 10); }
+    })();
+
+    function setConnection(connected, playerId = null) {
+        if (!connected) stopGameRumble();
+        state.connected = connected;
+        if (playerId !== null && playerId !== undefined) state.playerId = Number(playerId);
+        if (!connected) state.playerId = null;
+        if (connected) Haptics.playDualRumble(0.5, 0.5, 60);
+        if (connected) startStateResync(); else stopStateResync();
+        updatePillLabel();
+    }
+
+    function startPing() {
+        stopPing();
+        state.pingTimer = setInterval(() => {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.lastServerPongSent = performance.now();
+                state.ws.send(JSON.stringify({ type: "ping" }));
+            }
+            if (state.lastServerPong && performance.now() - state.lastServerPong > 7000) {
+                try { state.ws.close(); } catch (_) {}
+            }
+        }, 2000);
+    }
+    function stopPing() { if (state.pingTimer) { clearInterval(state.pingTimer); state.pingTimer = null; } }
+
+    function scheduleReconnect() {
+        if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+        const delay = Math.min(state.reconnectDelay + Math.random() * 150, 5000);
+        state.reconnectDelay = Math.min(state.reconnectDelay * 1.7, 5000);
+        state.reconnectTimer = setTimeout(() => { state.reconnectTimer = null; connect(); }, delay);
+    }
+
+    function forceReconnect() {
+        if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
+        state.reconnectDelay = 250;
+        const old = state.ws;
+        state.ws = null;              // detaches the old socket's handlers (guards below)
+        if (old) { try { old.close(); } catch (_) {} }
+        stopPing();
+        setConnection(false);
+        connect();
+    }
+
+    function connect() {
+        if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) return;
+        let ws;
+        try {
+            const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+            ws = new WebSocket(`${protocol}//${location.host}/ws?cid=${encodeURIComponent(clientId)}`);
+        } catch (e) { setConnection(false); scheduleReconnect(); return; }
+        state.ws = ws;
+        ws.binaryType = "arraybuffer";
+
+        // Handlers ignore events from a socket that is no longer state.ws; a
+        // late "close" from an old socket must not tear down the new one.
+        ws.addEventListener("open", () => {
+            if (state.ws !== ws) return;
+            state.connectionEpoch++;
+            state.reconnectDelay = 250;
+            state.lastServerPong = performance.now();
+            startPing();
+        });
+        ws.addEventListener("close", () => {
+            if (state.ws !== ws) return;
+            setConnection(false);
+            stopPing();
+            scheduleReconnect();
+        });
+        ws.addEventListener("error", () => { if (state.ws === ws) { try { ws.close(); } catch (_) {} } });
+        ws.addEventListener("message", event => {
+            if (state.ws !== ws) return;
+            try {
+                if (typeof event.data !== "string") return;
+                const msg = JSON.parse(event.data);
+                if (msg.type === "welcome" && msg.player_id) {
+                    setConnection(true, msg.player_id);
+                    state.packetSeq = 0;
+                    state.connectionEpoch++;
+                    state.stateDirty = true;      // keep local input: a press landing right at welcome must survive
+                    sendBinaryState(true);
+                } else if (msg.type === "pong") {
+                    const t = performance.now();
+                    state.serverLatencyMs = Math.max(0, t - state.lastServerPongSent);
+                    state.lastServerPong = t;
+                } else if (msg.type === "server_full") {
+                    state.reconnectDelay = 3000;
+                    toast("Server is full (" + msg.max_players + " players max)");
+                } else if (msg.type === "controller_unavailable") {
+                    toast("Virtual controller unavailable - is ViGEmBus installed?");
+                } else if (msg.type === "rumble") {
+                    const large = clamp(Number(msg.large) || 0, 0, 255);
+                    const small = clamp(Number(msg.small) || 0, 0, 255);
+                    if (large === 0 && small === 0) stopGameRumble(); else startGameRumble(small / 255, large / 255);
+                }
+            } catch (e) {}
+        });
+    }
+
+    let hiddenAt = 0;
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) { hiddenAt = performance.now(); releaseAllHeldInputs(); return; }
+        const away = hiddenAt ? performance.now() - hiddenAt : 0;
+        hiddenAt = 0;
+        if (!state.ws || state.ws.readyState !== WebSocket.OPEN || away > 4000) forceReconnect();
+    });
+    window.addEventListener("online", () => { if (!state.ws || state.ws.readyState !== WebSocket.OPEN) forceReconnect(); });
+    window.addEventListener("pageshow", e => { if (e.persisted) forceReconnect(); });
+
+    // -------------------------------------------------------- player pill + gyro
+    function rectsOverlap(a, b, gap = 6) {
+        return !(a.right + gap <= b.left || a.left - gap >= b.right || a.bottom + gap <= b.top || a.top - gap >= b.bottom);
+    }
+
+    function positionPlayerPill() {
+        const pill = $("#playerPill");
+        if (!pill) return;
+        const margin = Math.max(8, Math.round(innerWidth * 0.015));
+        const top0 = Math.max(8, (window.visualViewport && window.visualViewport.offsetTop) || 0) + margin;
+        const w = pill.offsetWidth, h = pill.offsetHeight;
+        const cands = [
+            { left: innerWidth - w - margin, top: top0 },
+            { left: margin, top: top0 },
+            { left: Math.round((innerWidth - w) / 2) + 90, top: top0 },
+            { left: innerWidth - w - margin, top: innerHeight - h - margin },
+            { left: margin, top: innerHeight - h - margin },
+            { left: innerWidth - w - margin, top: top0 + h + 8 },
+            { left: margin, top: top0 + h + 8 },
+        ];
+        const obstacles = $$(".ctl, #themeSwitcher");
+        for (const c of cands) {
+            const r = { left: c.left, right: c.left + w, top: c.top, bottom: c.top + h };
+            if (!obstacles.some(el => rectsOverlap(r, el.getBoundingClientRect()))) {
+                pill.style.left = c.left + "px"; pill.style.top = c.top + "px";
+                return;
+            }
+        }
+        pill.style.left = (innerWidth - w - margin) + "px";
+        pill.style.top = top0 + "px";
+    }
+
+    function updatePillLabel() {
+        const pill = $("#playerPill");
+        pill.classList.toggle("gyro-1", state.gyroModeIndex === 1);
+        pill.classList.toggle("gyro-2", state.gyroModeIndex === 2);
+        if (!state.connected || !state.playerId) {
+            pill.classList.remove("connected");
+            $("#playerLabel").textContent = "—";
+        } else {
+            pill.classList.add("connected");
+            $("#playerLabel").textContent = String(Number(state.playerId));
+        }
+        positionPlayerPill();
+    }
+
+    const sticksOf = side => $$(`.ctl.stick[data-map="${side}"]`);
+
+    function updateKnobVisual(container, x, y) {
+        if (!container) return;
+        const knob = $(".stick-knob", container);
+        if (!knob) return;
+        const maxTranslate = Math.max(0, Math.min(container.clientWidth, container.clientHeight) * 0.38);
+        knob.style.transform = `translate3d(${x * maxTranslate}px, ${y * maxTranslate}px, 0)`;
+    }
+    function setKnobs(side, x, y) { for (const el of sticksOf(side)) updateKnobVisual(el, x, y); }
+
+    let gyroListenersInstalled = false;
+    function installGyroListeners() {
+        if (gyroListenersInstalled) return;
+        gyroListenersInstalled = true;
+        addEventListener("deviceorientation", handleOrientation, { passive: true });
+        addEventListener("deviceorientationabsolute", handleOrientation, { passive: true });
+        addEventListener("devicemotion", handleMotion, { passive: true });
+    }
+
+    async function requestGyroPermission() {
+        try {
+            if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+                if ((await DeviceOrientationEvent.requestPermission()) !== "granted") return false;
+            }
+            if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+                if ((await DeviceMotionEvent.requestPermission()) !== "granted") return false;
+            }
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function resetGyroCalibration() {
+        state.gyroCalibratedGamma = null; state.gyroCalibratedBeta = null;
+        state.gyroSmoothX = 0; state.gyroSmoothY = 0; state.gyroLastTime = 0;
+        state.gyroSensorSource = "none"; state.gyroSensorSeen = false;
+    }
+
+    async function enableGyro() {
+        if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+            state.gyroReady = false; state.gyroEnabled = false;
+            toast("Gyro needs HTTPS on most phones");
+            return false;
+        }
+        if (typeof DeviceOrientationEvent === "undefined" && typeof DeviceMotionEvent === "undefined") {
+            state.gyroReady = false; state.gyroEnabled = false;
+            toast("This device has no motion sensors");
+            return false;
+        }
+        if (!(await requestGyroPermission())) { state.gyroReady = false; state.gyroEnabled = false; return false; }
+        installGyroListeners();
+        state.gyroReady = true; state.gyroEnabled = true;
+        resetGyroCalibration();
+        return true;
+    }
+
+    async function cycleGyroMode() {
+        state.gyroModeIndex = (state.gyroModeIndex + 1) % 3;
+        if (state.gyroModeIndex !== 0) {
+            if (!(await enableGyro())) state.gyroModeIndex = 0;
+        } else { state.gyroReady = false; state.gyroEnabled = false; }
+        resetGyroCalibration();
+        if (state.gyroModeIndex !== 2) { state.stickState.lx = 0; state.stickState.ly = 0; setKnobs("L", 0, 0); }
+        if (state.gyroModeIndex !== 1) { state.stickState.rx = 0; state.stickState.ry = 0; setKnobs("R", 0, 0); }
+        updatePillLabel();
+        sendBinaryState();
+    }
+
+    $("#playerPill").addEventListener("pointerup", e => {
+        if (editing) return;
+        e.preventDefault(); e.stopPropagation();
+        cycleGyroMode();
+    });
+
+    function applyGyro(x, y, source) {
+        if (state.gyroModeIndex === 0 || !state.gyroReady) return;
+        state.gyroSensorSeen = true;
+        state.gyroSensorSource = source;
+        if (state.gyroCalibratedGamma === null || state.gyroCalibratedBeta === null) {
+            state.gyroCalibratedGamma = x; state.gyroCalibratedBeta = y;
+            state.gyroSmoothX = 0; state.gyroSmoothY = 0;
+            return;
+        }
+        const angle = ((screen.orientation?.angle ?? window.orientation ?? 0) + 360) % 360;
+        let gx = x - state.gyroCalibratedGamma;
+        let gy = y - state.gyroCalibratedBeta;
+        if (angle === 90) [gx, gy] = [gy, -gx];
+        else if (angle === 180) { gx = -gx; gy = -gy; }
+        else if (angle === 270) [gx, gy] = [-gy, gx];
+
+        const dead = 1.2;
+        if (Math.abs(gx) < dead) gx = 0;
+        if (Math.abs(gy) < dead) gy = 0;
+        const range = 22 / settings.gyroSens;
+        let tx = clamp(gx / range, -1, 1), ty = clamp(gy / range, -1, 1);
+        const curve = v => Math.sign(v) * Math.abs(v) * Math.abs(v) * (3 - 2 * Math.abs(v));
+        tx = curve(tx); ty = curve(ty);
+        const mag = Math.max(Math.abs(tx), Math.abs(ty));
+        const alpha = mag > 0.65 ? 0.52 : mag > 0.25 ? 0.36 : 0.22;
+        state.gyroSmoothX += (tx - state.gyroSmoothX) * alpha;
+        state.gyroSmoothY += (ty - state.gyroSmoothY) * alpha;
+        driveGyroStick(clamp(state.gyroSmoothX, -1, 1), clamp(state.gyroSmoothY, -1, 1));
+        const now = performance.now();
+        if (now - state.gyroLastTime >= 12) { state.gyroLastTime = now; sendBinaryState(); }
+    }
+
+    function driveGyroStick(sx, sy) {
+        if (state.gyroModeIndex === 1) { state.stickState.lx = sx; state.stickState.ly = sy; setKnobs("L", sx, sy); }
+        else { state.stickState.rx = sx; state.stickState.ry = sy; setKnobs("R", sx, sy); }
+    }
+
+    function handleOrientation(e) {
+        if (Number.isFinite(e.gamma) && Number.isFinite(e.beta)) applyGyro(e.gamma, e.beta, "orientation");
+    }
+    function handleMotion(e) {
+        const r = e.rotationRate;
+        if (!r || !Number.isFinite(r.alpha) || !Number.isFinite(r.beta) || !Number.isFinite(r.gamma)) return;
+        if (state.gyroSensorSeen && state.gyroSensorSource === "orientation") return;
+        if (state.gyroModeIndex === 0 || !state.gyroReady) return;
+        state.gyroSensorSeen = true; state.gyroSensorSource = "motion";
+        const k = settings.gyroSens;
+        state.gyroSmoothX += (clamp(r.gamma * k / 90, -1, 1) - state.gyroSmoothX) * 0.16;
+        state.gyroSmoothY += (clamp(r.beta * k / 90, -1, 1) - state.gyroSmoothY) * 0.16;
+        driveGyroStick(state.gyroSmoothX, state.gyroSmoothY);
+        sendBinaryState();
+    }
+
+    // ------------------------------------------------------------ control specs
+    const GAMEPAD_MAPS = ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "LS", "RS", "BACK", "START", "GUIDE",
+                          "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"];
+    const GAMEPAD_NAMES = { LS: "L3 (left stick click)", RS: "R3 (right stick click)", BACK: "Back / Select", START: "Start / Menu",
+                            GUIDE: "Guide / Home", DPAD_UP: "D-pad up", DPAD_DOWN: "D-pad down", DPAD_LEFT: "D-pad left", DPAD_RIGHT: "D-pad right" };
+    const SPECIAL_KEYS = ["space", "enter", "esc", "tab", "shift", "ctrl", "alt", "backspace", "delete", "up", "down", "left", "right",
+                          "home", "end", "pageup", "pagedown", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"];
+    const LETTER_KEYS = "abcdefghijklmnopqrstuvwxyz0123456789".split("");
+    const KEY_LABELS = { space: "Space", enter: "Enter", esc: "Esc", tab: "Tab", shift: "Shift", ctrl: "Ctrl", alt: "Alt", backspace: "Bksp",
+                         delete: "Del", up: "↑", down: "↓", left: "←", right: "→", pageup: "PgUp", pagedown: "PgDn" };
+    const MOUSE_BTNS = ["left", "right", "middle"];
+    const MOUSE_LABELS = { left: "LMB", right: "RMB", middle: "MMB" };
+    const THEMES = [["default", "Default"], ["glass", "Glass"], ["midnight", "Midnight"], ["neon", "Neon"], ["crimson", "Crimson"], ["light", "Light"], ["gameboy", "Game Boy"]];
+    const SHAPES = [["round", "Round"], ["square", "Square"], ["wide", "Wide"]];
+    const FACE_STYLES = [["diamond", "Diamond"], ["gc", "GameCube"], ["row", "Row"], ["grid", "Grid 3x2"]];
+
+    const BTN_ICONS = {
+        BACK: '<svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>',
+        START: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+        GUIDE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M9 16c2-1.5 4-1.5 6 0" stroke-linecap="round"/><path d="M8 12c2.5-2 5.5-2 8 0" stroke-linecap="round"/></svg>',
+    };
+
+    function validMap(m) {
+        if (typeof m !== "string") return false;
+        if (GAMEPAD_MAPS.includes(m)) return true;
+        if (m.startsWith("KEY:")) { const k = m.slice(4); return LETTER_KEYS.includes(k) || SPECIAL_KEYS.includes(k); }
+        if (m.startsWith("MOUSE:")) return MOUSE_BTNS.includes(m.slice(6));
+        return false;
+    }
+
+    function defaultLabel(map) {
+        if (map === "LS") return "L3";
+        if (map === "RS") return "R3";
+        if (map === "DPAD_UP") return "▲";
+        if (map === "DPAD_DOWN") return "▼";
+        if (map === "DPAD_LEFT") return "◀";
+        if (map === "DPAD_RIGHT") return "▶";
+        if (map.startsWith("KEY:")) { const k = map.slice(4); return KEY_LABELS[k] || k.toUpperCase(); }
+        if (map.startsWith("MOUSE:")) return MOUSE_LABELS[map.slice(6)];
+        return map;
+    }
+    function mapDisplayName(map) {
+        if (GAMEPAD_NAMES[map]) return GAMEPAD_NAMES[map];
+        if (map.startsWith("KEY:")) return "Key: " + defaultLabel(map);
+        if (map.startsWith("MOUSE:")) return "Mouse: " + MOUSE_LABELS[map.slice(6)];
+        return map;
+    }
+
+    // ------------------------------------------------------------ face presets
+    const FACE = {
+        xbox:   { style: "diamond", maps: ["Y", "X", "B", "A"] },
+        nin:    { style: "diamond", maps: ["X", "Y", "A", "B"] },
+        ps:     { style: "diamond", maps: ["Y", "X", "B", "A"], labels: ["△", "□", "○", "✕"], colors: ["#4fd1a5", "#e58bd1", "#ff6b6b", "#6fa8ff"] },
+        snes:   { style: "diamond", maps: ["X", "Y", "A", "B"], colors: ["#5b8def", "#4fbf6a", "#e5534b", "#f2c744"] },
+        gc:     { style: "gc", maps: ["A", "B", "X", "Y"], colors: ["#2e8b57", "#cd5c5c", "#c9c9c9", "#c9c9c9"] },
+        pair:   { style: "row", maps: ["B", "A"], colors: ["#c43b3b", "#c43b3b"] },
+        gb:     { style: "row", maps: ["B", "A"], colors: ["#8b1a4a", "#8b1a4a"] },
+        row3:   { style: "row", maps: ["A", "B", "RB"], labels: ["A", "B", "C"] },
+        row4:   { style: "row", maps: ["X", "Y", "RB", "RT"] },
+        grid6:  { style: "grid", maps: ["X", "Y", "RB", "A", "B", "RT"], labels: ["X", "Y", "Z", "A", "B", "C"] },
+        arcade: { style: "grid", maps: ["X", "Y", "RB", "A", "B", "RT"], colors: ["#e5534b", "#f2c744", "#4fbf6a", "#5b8def", "#e5534b", "#f2c744"] },
+    };
+    const FACE_NAMES = { xbox: "Xbox A B X Y", nin: "Nintendo", ps: "PlayStation", snes: "SNES (colours)", gc: "GameCube", pair: "Two buttons (NES)",
+                         row3: "3 buttons (Genesis)", row4: "4 in a row", grid6: "6 buttons (Saturn)", arcade: "6 arcade buttons" };
+
+    // ---------------------------------------------------------------- layouts
+    let ctlCounter = 0;
+    const newCid = () => "c" + (++ctlCounter) + Math.random().toString(36).slice(2, 5);
+
+    function makeControl(kind, x, y, s = 1, o = {}) {
+        const c = { id: newCid(), x, y, s };
+        if (kind === "dpad") c.type = "dpad";
+        else if (kind === "L" || kind === "R") { c.type = "stick"; c.map = kind; }
+        else if (kind === "tp") c.type = "touchpad";
+        else if (kind.startsWith("face:")) {
+            const f = FACE[kind.slice(5)];
+            c.type = "face"; c.style = o.style || f.style; c.maps = o.maps || f.maps.slice();
+            if (o.labels || f.labels) c.labels = (o.labels || f.labels).slice();
+            if (o.colors || f.colors) c.colors = (o.colors || f.colors).slice();
+        } else { c.type = "button"; c.map = kind; }
+        for (const k of ["label", "color", "shape", "turbo", "latch", "sens", "value"]) if (o[k] !== undefined) c[k] = o[k];
+        return c;
+    }
+
+    function preset(slug, name, theme, entries) {
+        return { id: "p-" + slug, name, theme, opacity: 1, preset: true, controls: entries.map(e => makeControl(e[0], e[1], e[2], e[3] ?? 1, e[4] || {})) };
+    }
+    const flip = entries => entries.map(e => [e[0], round1(100 - e[1]), e[2], e[3], e[4]]);
+
+    // Positions are percentages of the screen (centre of each control).
+    // Sizes scale with the screen height, so these hold on every phone; the
+    // audit tool (window.__layoutAudit) checks them for overlaps.
+    const XBOX = [
+        ["dpad", 20, 28], ["L", 14, 75], ["R", 80, 28], ["face:xbox", 85, 73],
+        ["LB", 33, 40, .85], ["LT", 33, 65, .85], ["RB", 67, 40, .85], ["RT", 67, 65, .85],
+        ["BACK", 41, 17, .7], ["GUIDE", 50, 24, .9], ["START", 59, 17, .7],
+        ["LS", 4, 50, .65], ["RS", 96, 50, .65],
+    ];
+
+    const PRESETS = [
+        preset("xbox", "Xbox Default", "default", XBOX),
+        preset("xbox-classic", "Xbox Classic", "default", [
+            ["L", 14, 36], ["dpad", 36, 75], ["R", 64, 75], ["face:xbox", 85, 36],
+            ["LB", 30, 11, .8], ["LT", 18, 11, .8], ["RB", 70, 11, .8], ["RT", 82, 11, .8],
+            ["BACK", 44, 38, .7], ["GUIDE", 50, 22, .9], ["START", 56, 38, .7],
+            ["LS", 4, 62, .65], ["RS", 96, 62, .65],
+        ]),
+        preset("left-handed", "Left-Handed", "default", flip(XBOX)),
+        preset("ps", "PlayStation", "default", [
+            ["dpad", 17, 40], ["L", 36, 74], ["R", 64, 74], ["face:ps", 84, 40],
+            ["LB", 8, 11, .8], ["LT", 20, 11, .8], ["RB", 92, 11, .8], ["RT", 80, 11, .8],
+            ["BACK", 41, 24, .7], ["START", 59, 24, .7], ["GUIDE", 50, 48, .85],
+            ["LS", 22, 90, .6], ["RS", 78, 90, .6],
+        ]),
+        preset("switch", "Switch Pro", "default", [
+            ["L", 15, 40], ["dpad", 36, 75], ["R", 64, 75], ["face:nin", 85, 40],
+            ["LB", 8, 11, .8], ["LT", 20, 11, .8], ["RB", 92, 11, .8], ["RT", 80, 11, .8],
+            ["BACK", 41, 23, .7], ["START", 59, 23, .7], ["GUIDE", 54, 50, .8],
+        ]),
+        preset("steamdeck", "Steam Deck", "midnight", [
+            ["L", 10, 37], ["dpad", 11, 80, .8], ["R", 89, 77, .9], ["face:xbox", 89, 30, .95], ["tp", 50, 74, .9],
+            ["LB", 25, 11, .8], ["LT", 36, 11, .8], ["RB", 75, 11, .8], ["RT", 64, 11, .8],
+            ["BACK", 41, 36, .7], ["START", 59, 36, .7], ["GUIDE", 50, 48, .8],
+        ]),
+        preset("n64", "N64", "default", [
+            ["dpad", 15, 42, .95], ["L", 50, 62, 1.05], ["face:pair", 81, 70, 1, { colors: ["#2f8f4a", "#2f6fd1"] }],
+            ["R", 82, 30, .65], ["LB", 8, 12, .85], ["RB", 92, 12, .85], ["LT", 24, 85, .85, { label: "Z" }],
+            ["START", 50, 30, .85, { color: "#d33" }],
+        ]),
+        preset("gamecube", "GameCube", "default", [
+            ["L", 14, 39], ["dpad", 30, 78, .8], ["R", 68, 76, .8], ["face:gc", 84, 42, 1.05],
+            ["LT", 7, 11, .85, { label: "L" }], ["RT", 93, 11, .85, { label: "R" }], ["RB", 75, 13, .75, { label: "Z", color: "#7b3fd0" }],
+            ["START", 50, 40, .8],
+        ]),
+        preset("snes", "SNES", "light", [
+            ["dpad", 17, 50, 1.05], ["face:snes", 83, 50, 1.05],
+            ["LB", 9, 12, .9, { shape: "wide", label: "L" }], ["RB", 91, 12, .9, { shape: "wide", label: "R" }],
+            ["BACK", 41, 78, .75, { shape: "wide", label: "SELECT" }], ["START", 59, 78, .75, { shape: "wide", label: "START" }],
+        ]),
+        preset("nes", "NES", "default", [
+            ["dpad", 17, 52, 1.05], ["face:pair", 80, 58, 1.1],
+            ["BACK", 41, 80, .75, { shape: "wide", label: "SELECT" }], ["START", 59, 80, .75, { shape: "wide", label: "START" }],
+        ]),
+        preset("saturn", "Sega Saturn", "midnight", [
+            ["dpad", 16, 52, 1.05], ["face:grid6", 74, 52, .95],
+            ["LB", 9, 12, .9, { shape: "wide", label: "L" }], ["RB", 91, 12, .9, { shape: "wide", label: "R" }],
+            ["START", 50, 84, .8, { shape: "wide" }],
+        ]),
+        preset("genesis", "Mega Drive", "default", [
+            ["dpad", 17, 52, 1.05], ["face:row3", 80, 62, 1], ["START", 50, 78, .8, { shape: "wide" }],
+        ]),
+        preset("arcade", "Arcade Stick", "default", [
+            ["L", 17, 56, 1.15], ["face:arcade", 74, 54, .95],
+            ["BACK", 42, 14, .7], ["START", 58, 14, .7], ["GUIDE", 50, 30, .8],
+            ["LB", 41, 86, .75], ["LT", 59, 86, .75],
+        ]),
+        preset("hitbox", "Hitbox", "default", [
+            ["DPAD_LEFT", 10, 62, 1.1, { shape: "square" }], ["DPAD_DOWN", 21, 62, 1.1, { shape: "square" }], ["DPAD_RIGHT", 32, 62, 1.1, { shape: "square" }],
+            ["DPAD_UP", 27, 86, 1.1, { shape: "square" }], ["face:arcade", 74, 54, .95],
+            ["BACK", 42, 14, .7], ["START", 58, 14, .7], ["GUIDE", 50, 30, .8],
+        ]),
+        preset("fightpad", "Fight Pad", "default", [
+            ["dpad", 17, 52, 1.2], ["face:grid6", 77, 52, .95],
+            ["LB", 36, 20, .85], ["LT", 64, 20, .85], ["BACK", 41, 84, .7], ["START", 59, 84, .7], ["GUIDE", 50, 46, .85],
+        ]),
+        preset("racing", "Racing", "default", [
+            ["L", 22, 56, 1.05], ["LT", 7, 70, 1.6, { shape: "square", label: "BRAKE" }], ["RT", 93, 68, 1.9, { shape: "square", label: "GAS" }],
+            ["LB", 10, 20, 1, { label: "−" }], ["RB", 90, 20, 1, { label: "+" }],
+            ["face:xbox", 72, 34, .85], ["dpad", 48, 78, .75], ["BACK", 41, 14, .7], ["START", 59, 14, .7], ["GUIDE", 50, 30, .8],
+        ]),
+        preset("fps", "FPS Pro", "default", [
+            ["L", 14, 72], ["R", 66, 72], ["A", 91, 82, 1.1], ["B", 91, 58, 1], ["X", 80, 38, .9], ["Y", 91, 34, .9],
+            ["LT", 9, 14, 1.05, { label: "AIM" }], ["LB", 9, 34, .9], ["RT", 91, 12, 1.1, { label: "FIRE" }], ["RB", 79, 12, .9],
+            ["BACK", 41, 16, .7], ["START", 59, 16, .7], ["GUIDE", 50, 30, .8], ["dpad", 32, 30, .7], ["LS", 36, 88, .65],
+        ]),
+        preset("platformer", "Platformer", "default", [
+            ["dpad", 17, 62, 1.1], ["face:xbox", 83, 62, 1.05],
+            ["LB", 9, 12, .9], ["RB", 91, 12, .9], ["BACK", 42, 15, .7], ["START", 58, 15, .7],
+        ]),
+        preset("cyberclaw", "Cyber Claw", "neon", [
+            ["L", 18, 58], ["dpad", 9, 22, .75], ["R", 82, 58], ["face:xbox", 91, 22, .75],
+            ["LB", 27, 11, .85], ["LT", 38, 11, .85], ["RT", 62, 11, .85], ["RB", 73, 11, .85],
+            ["BACK", 36, 86, .7], ["START", 64, 86, .7], ["GUIDE", 50, 52, .85], ["LS", 4, 70, .65], ["RS", 96, 70, .65],
+        ]),
+        preset("ds3", "3DS Dual", "default", [
+            ["L", 14, 39], ["dpad", 14, 80, .75], ["R", 85, 76, .8], ["face:nin", 86, 39],
+            ["LB", 8, 10, .8], ["LT", 21, 10, .8], ["RB", 92, 10, .8], ["RT", 79, 10, .8],
+            ["BACK", 38, 82, .7], ["START", 62, 82, .7], ["GUIDE", 50, 50, .8],
+        ]),
+        preset("onehand", "One-Handed", "default", [
+            ["L", 70, 70], ["face:xbox", 87, 31, .9], ["RT", 50, 30, 1.05], ["RB", 50, 54, .9],
+            ["LB", 33, 30, .9], ["LT", 33, 54, .9], ["dpad", 15, 40, .8], ["START", 15, 82, .7], ["BACK", 28, 82, .7],
+        ]),
+        preset("minimal", "Minimal", "default", [
+            ["L", 17, 66, 1.1], ["A", 88, 66, 1.4], ["B", 72, 82, 1.2], ["START", 50, 14, .7],
+        ]),
+        preset("bigbuttons", "Big Buttons", "default", [
+            ["dpad", 17, 52, 1.35], ["face:xbox", 83, 52, 1.35],
+            ["LB", 8, 13, 1.1], ["LT", 26, 13, 1.1], ["RB", 92, 13, 1.1], ["RT", 74, 13, 1.1],
+            ["BACK", 43, 70, .85], ["START", 57, 70, .85], ["GUIDE", 50, 88, .85],
+        ]),
+        preset("glass", "Glass", "glass", XBOX),
+        preset("neon", "Neon", "neon", XBOX),
+        preset("gameboy", "Game Boy", "gameboy", [
+            ["dpad", 18, 52, 1.1], ["face:gb", 82, 58, 1.1],
+            ["BACK", 41, 84, .75, { shape: "wide", label: "SELECT" }], ["START", 59, 84, .75, { shape: "wide", label: "START" }],
+        ]),
+        preset("pc", "PC Keyboard + Mouse", "midnight", [
+            ["KEY:w", 17, 38, 1, { shape: "square" }], ["KEY:a", 8, 60, 1, { shape: "square" }], ["KEY:s", 17, 60, 1, { shape: "square" }], ["KEY:d", 26, 60, 1, { shape: "square" }],
+            ["KEY:shift", 8, 84, .9, { shape: "wide" }], ["KEY:space", 24, 84, 1, { shape: "wide" }], ["KEY:ctrl", 39, 84, .8, { shape: "wide" }],
+            ["KEY:e", 33, 38, .85, { shape: "square" }], ["KEY:q", 6, 36, .85, { shape: "square" }], ["KEY:r", 33, 60, .85, { shape: "square" }],
+            ["KEY:esc", 6, 11, .7, { shape: "square" }], ["KEY:tab", 18, 11, .7, { shape: "wide" }],
+            ["tp", 68, 50, 1.8], ["MOUSE:left", 94, 28, 1, { shape: "square" }], ["MOUSE:right", 94, 72, 1, { shape: "square" }],
+        ]),
+    ];
+
+    // ---- validation / migration of saved or imported layouts
+    const THEME_IDS = THEMES.map(t => t[0]);
+    const SHAPE_IDS = SHAPES.map(t => t[0]);
+    const STYLE_IDS = FACE_STYLES.map(t => t[0]);
+    const COLOR_RE = /^#[0-9a-f]{6}$/i;
+    const newLayoutId = () => "l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+    function migrateV1(l) {
+        // v1 layouts stored a fixed set of controls in an object
+        const mapTo = { dpad: ["dpad"], lstick: ["L"], rstick: ["R"], abxy: ["face:xbox"], lb: ["LB"], lt: ["LT"], rb: ["RB"], rt: ["RT"],
+                        ls: ["LS"], rs: ["RS"], back: ["BACK"], start: ["START"], guide: ["GUIDE"] };
+        const entries = [];
+        for (const [k, v] of Object.entries(l.controls || {})) {
+            if (!mapTo[k] || !v || v.hidden) continue;
+            entries.push([mapTo[k][0], Number(v.x), Number(v.y), Number(v.s) || 1]);
+        }
+        return { id: l.id, name: l.name, theme: l.glass ? "glass" : "default", opacity: l.opacity,
+                 controls: entries.map(e => makeControl(e[0], e[1], e[2], e[3])) };
+    }
+
+    function sanitizeLayout(l) {
+        if (!l || typeof l !== "object") return null;
+        if (l.controls && !Array.isArray(l.controls) && typeof l.controls === "object") l = migrateV1(l);
+        if (!Array.isArray(l.controls)) return null;
+        const out = {
+            id: typeof l.id === "string" && /^[\w-]{1,40}$/.test(l.id) ? l.id : newLayoutId(),
+            name: String(l.name || "Custom").slice(0, 40),
+            theme: THEME_IDS.includes(l.theme) ? l.theme : "default",
+            opacity: clamp(Number(l.opacity) || 1, 0.25, 1),
+            controls: [],
+        };
+        for (const v of l.controls.slice(0, 80)) {
+            if (!v || typeof v !== "object") continue;
+            const x = Number(v.x), y = Number(v.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+            const c = { id: newCid(), x: round1(clamp(x, 0, 100)), y: round1(clamp(y, 0, 100)),
+                        s: Math.round(clamp(Number(v.s) || 1, 0.35, 3.2) * 100) / 100 };
+            if (v.type === "dpad") c.type = "dpad";
+            else if (v.type === "touchpad") c.type = "touchpad";
+            else if (v.type === "stick" && (v.map === "L" || v.map === "R")) { c.type = "stick"; c.map = v.map; }
+            else if (v.type === "button" && validMap(v.map)) { c.type = "button"; c.map = v.map; }
+            else if (v.type === "face" && Array.isArray(v.maps) && v.maps.length >= 2 && v.maps.length <= 6 && v.maps.every(validMap)) {
+                c.type = "face"; c.maps = v.maps.slice();
+                c.style = STYLE_IDS.includes(v.style) ? v.style : "diamond";
+                if (c.style === "diamond" && c.maps.length !== 4) c.style = "row";
+                if (c.style === "gc" && c.maps.length !== 4) c.style = "row";
+                if (Array.isArray(v.labels)) c.labels = v.labels.slice(0, 6).map(t => String(t || "").slice(0, 8));
+                if (Array.isArray(v.colors)) c.colors = v.colors.slice(0, 6).map(t => (COLOR_RE.test(t) ? t : ""));
+            } else continue;
+            if (typeof v.label === "string" && v.label) c.label = v.label.slice(0, 8);
+            if (typeof v.color === "string" && COLOR_RE.test(v.color)) c.color = v.color;
+            if (SHAPE_IDS.includes(v.shape)) c.shape = v.shape;
+            if (v.turbo) c.turbo = true;
+            if (v.latch) c.latch = true;
+            if (Number.isFinite(Number(v.sens))) c.sens = clamp(Number(v.sens), 0.3, 3);
+            if (Number.isFinite(Number(v.value))) c.value = clamp(Math.round(Number(v.value)), 5, 100);
+            out.controls.push(c);
+        }
+        return out;
+    }
+
+    const cloneLayout = l => JSON.parse(JSON.stringify(l));
+
+    // --------------------------------------------------------- control building
+    function inkFor(hex) {
+        const n = parseInt(hex.slice(1), 16);
+        const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+        return lum > 0.6 ? "#1a1a1a" : "#ffffff";
+    }
+    function applyColor(el, color) {
+        if (color && COLOR_RE.test(color)) { el.style.setProperty("--fill", color); el.style.setProperty("--ink", inkFor(color)); }
+        else { el.style.removeProperty("--fill"); el.style.removeProperty("--ink"); }
+    }
+    function setBtnContent(el, map, label) {
+        if (label) { el.textContent = label; el.classList.toggle("long", label.length > 3); return; }
+        if (BTN_ICONS[map]) { el.innerHTML = BTN_ICONS[map]; el.classList.remove("long"); return; }
+        const t = defaultLabel(map);
+        el.textContent = t;
+        el.classList.toggle("long", t.length > 3);
+    }
+    const mkEl = (cls, tag = "div") => { const e = document.createElement(tag); e.className = cls; return e; };
+
+    const ctlEls = new Map();   // control id -> element
+    let layoutRef = null;       // layout being displayed
+
+    function buildControl(c) {
+        let el;
+        if (c.type === "button") {
+            el = mkEl("ctl cbtn shape-" + (c.shape || "round"));
+            el.dataset.map = c.map;
+            setBtnContent(el, c.map, c.label);
+            applyColor(el, c.color);
+            bindButton(el, el, c, c.map);
+        } else if (c.type === "dpad") {
+            el = mkEl("ctl dpad");
+            el.innerHTML = '<div class="dpad-btn dpad-up" data-dir="DPAD_UP"></div><div class="dpad-btn dpad-left" data-dir="DPAD_LEFT"></div>' +
+                '<div class="dpad-center"></div><div class="dpad-btn dpad-right" data-dir="DPAD_RIGHT"></div><div class="dpad-btn dpad-down" data-dir="DPAD_DOWN"></div>';
+            bindDpad(el);
+        } else if (c.type === "stick") {
+            el = mkEl("ctl stick");
+            el.dataset.map = c.map;
+            el.innerHTML = '<div class="stick-outer"><div class="stick-knob"></div></div>';
+            applyColor(el, c.color);
+            bindStick(el, c);
+        } else if (c.type === "face") {
+            el = mkEl("ctl face face-" + c.style);
+            c.maps.forEach((map, i) => {
+                const b = mkEl("cbtn fbtn f" + i + " shape-" + (c.shape || (c.style === "gc" && (i === 2 || i === 3) ? "square" : "round")));
+                b.dataset.map = map;
+                setBtnContent(b, map, c.labels && c.labels[i] ? c.labels[i] : "");
+                applyColor(b, (c.colors && c.colors[i]) || c.color);
+                el.appendChild(b);
+                bindButton(b, el, c, map);
+            });
+        } else if (c.type === "touchpad") {
+            el = mkEl("ctl touchpad");
+            el.textContent = c.label || "MOUSE";
+            bindTouchpad(el, c);
+        }
+        el.dataset.cid = c.id;
+        placeControl(el, c);
+        return el;
+    }
+
+    function placeControl(el, c) {
+        el.style.left = c.x + "%";
+        el.style.top = c.y + "%";
+        el.style.setProperty("--s", String(c.s));
+    }
+
+    function renderLayout(layout) {
+        releaseAllHeldInputs();
+        layer.textContent = "";
+        ctlEls.clear();
+        for (const c of layout.controls) {
+            const el = buildControl(c);
+            layer.appendChild(el);
+            ctlEls.set(c.id, el);
+        }
+        state.stickState.lx = state.stickState.ly = state.stickState.rx = state.stickState.ry = 0;
+        sendBinaryState(true);
+    }
+
+    function refreshControl(c) {
+        const old = ctlEls.get(c.id);
+        const el = buildControl(c);
+        if (old) old.replaceWith(el); else layer.appendChild(el);
+        ctlEls.set(c.id, el);
+        if (editing && editing.selected === c.id) el.classList.add("ctl-selected");
+    }
+
+    function applyTheme(layout) {
+        for (const cls of [...stage.classList]) if (cls.startsWith("theme-")) stage.classList.remove(cls);
+        stage.classList.add("theme-" + layout.theme);
+        stage.style.setProperty("--ui-opacity", String(layout.opacity));
+    }
+
+    // ---------------------------------------------------------------- binders
+    const TRIPLE_TAP_WINDOW_MS = 500;
+    const TURBO_HOLD_MS = 1000;
+    const TURBO_INTERVAL_MS = 45;
+
+    // `el` receives the pointer events, `visual` is the element that gets the pressed look.
+    function bindButton(el, host, c, map) {
+        const latch = !!c.latch;
+        const trigVal = Math.round(255 * clamp((c.value ?? 100) / 100, 0.05, 1));
+        let tapCount = 0, lastTapTime = 0, holdTimer = null;
+        let turboActive = false, turboInterval = null, latched = false;
+        let activePointerId = null;
+        const visual = el;
+
+        const stopTurbo = () => {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            if (turboInterval) { clearInterval(turboInterval); turboInterval = null; }
+            turboActive = false;
+            visual.classList.remove("turbo-active");
+        };
+        const startTurbo = () => {
+            if (turboActive) return;
+            turboActive = true;
+            visual.classList.add("turbo-active");
+            Haptics.playDualRumble(0.8, 0.8, 70);
+            let on = true;
+            turboInterval = setInterval(() => {
+                if (!turboActive) return;
+                on = !on;
+                emit(map, on, trigVal);
+                if (on) Haptics.vibrate(10);
+            }, TURBO_INTERVAL_MS);
+        };
+
+        const release = e => {
+            if (e) {
+                if (activePointerId !== e.pointerId) return;
+                e.preventDefault(); e.stopPropagation();
+            } else if (latched) {
+                latched = false;
+                visual.classList.remove("latched");
+                inputUp(map, true);
+            }
+            const wasDown = activePointerId !== null;
+            activePointerId = null;
+            heldInputs.delete(release);
+            visual.classList.remove("pressed");
+            host.classList.remove("pressed");
+            stopTurbo();
+            if (!latch && wasDown) inputUp(map);
+            const seq = tapCount;
+            setTimeout(() => { if (tapCount === seq && Date.now() - lastTapTime > TRIPLE_TAP_WINDOW_MS) tapCount = 0; }, TRIPLE_TAP_WINDOW_MS + 25);
+        };
+
+        const press = e => {
+            if (editing) return;
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            // Self-heal: a stale "down" (lost release) must never swallow a new tap.
+            if (activePointerId !== null) release();
+            e.preventDefault(); e.stopPropagation();
+            activePointerId = e.pointerId;
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+            heldInputs.add(release);
+            visual.classList.add("pressed");
+            if (host === el) { /* standalone: host is the element itself */ }
+            else host.classList.add("pressed");
+            Haptics.tick();
+
+            if (latch) {
+                if (latched) { latched = false; visual.classList.remove("latched"); inputUp(map, true); }
+                else { latched = true; visual.classList.add("latched"); inputDown(map, trigVal); }
+                return;
+            }
+            inputDown(map, trigVal);
+            if (c.turbo) { startTurbo(); return; }
+
+            const now = Date.now();
+            if (now - lastTapTime > TRIPLE_TAP_WINDOW_MS) tapCount = 0;
+            tapCount++;
+            lastTapTime = now;
+            if (tapCount === 3) {
+                if (holdTimer) clearTimeout(holdTimer);
+                holdTimer = setTimeout(() => { holdTimer = null; startTurbo(); }, TURBO_HOLD_MS);
+            } else if (tapCount > 3) tapCount = 1;
+        };
+
+        el.addEventListener("pointerdown", press);
+        el.addEventListener("pointerup", release);
+        el.addEventListener("pointercancel", release);
+        el.addEventListener("lostpointercapture", release);
+    }
+
+    function bindDpad(el) {
+        let activePointerId = null;
+        let active = new Set();
+
+        const directionFromPoint = (cx, cy) => {
+            const r = el.getBoundingClientRect();
+            const x = cx - (r.left + r.width / 2);
+            const y = cy - (r.top + r.height / 2);
+            if (Math.abs(x) > r.width * 0.55 || Math.abs(y) > r.height * 0.55) return new Set();
+            if (Math.hypot(x / (r.width * 0.5), y / (r.height * 0.5)) < 0.22) return new Set();
+            const a = Math.atan2(y, x) * 180 / Math.PI;
+            const d = new Set();
+            if (a >= -22.5 && a < 22.5) d.add("DPAD_RIGHT");
+            else if (a >= 22.5 && a < 67.5) { d.add("DPAD_RIGHT"); d.add("DPAD_DOWN"); }
+            else if (a >= 67.5 && a < 112.5) d.add("DPAD_DOWN");
+            else if (a >= 112.5 && a < 157.5) { d.add("DPAD_LEFT"); d.add("DPAD_DOWN"); }
+            else if (a >= 157.5 || a < -157.5) d.add("DPAD_LEFT");
+            else if (a >= -157.5 && a < -112.5) { d.add("DPAD_LEFT"); d.add("DPAD_UP"); }
+            else if (a >= -112.5 && a < -67.5) d.add("DPAD_UP");
+            else { d.add("DPAD_RIGHT"); d.add("DPAD_UP"); }
+            return d;
+        };
+
+        const visual = (dir, on) => el.querySelector(`[data-dir="${dir}"]`)?.classList.toggle("pressed", on);
+
+        const apply = next => {
+            for (const d of active) if (!next.has(d)) { inputUp(d, true); visual(d, false); }
+            for (const d of next) if (!active.has(d)) { inputDown(d); visual(d, true); Haptics.tick(); }
+            active = new Set(next);
+        };
+
+        const end = e => {
+            if (e) {
+                if (activePointerId !== e.pointerId) return;
+                e.preventDefault();
+            }
+            activePointerId = null;
+            heldInputs.delete(end);
+            for (const d of active) { inputUp(d); visual(d, false); }
+            active.clear();
+        };
+
+        el.addEventListener("pointerdown", e => {
+            if (editing) return;
+            if (activePointerId !== null) end();
+            e.preventDefault(); e.stopPropagation();
+            activePointerId = e.pointerId;
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+            heldInputs.add(end);
+            apply(directionFromPoint(e.clientX, e.clientY));
+        });
+        el.addEventListener("pointermove", e => {
+            if (activePointerId !== e.pointerId) return;
+            e.preventDefault();
+            apply(directionFromPoint(e.clientX, e.clientY));
+        });
+        el.addEventListener("pointerup", end);
+        el.addEventListener("pointercancel", end);
+        el.addEventListener("lostpointercapture", end);
+    }
+
+    function bindStick(el, c) {
+        const side = c.map;
+        const sens = (c.sens ?? 1);
+        let pointerId = null;
+        let raf = null;
+
+        const write = (x, y) => {
+            const gyroOwns = (side === "R" && state.gyroModeIndex === 2) || (side === "L" && state.gyroModeIndex === 1);
+            if (gyroOwns) return;
+            if (side === "R") { state.stickState.rx = x; state.stickState.ry = y; }
+            else { state.stickState.lx = x; state.stickState.ly = y; }
+        };
+
+        const move = e => {
+            if (pointerId !== e.pointerId) return;
+            e.preventDefault();
+            const r = el.getBoundingClientRect();
+            const dx = e.clientX - (r.left + r.width / 2);
+            const dy = e.clientY - (r.top + r.height / 2);
+            const dist = Math.hypot(dx, dy) || 1;
+            const radius = r.width * 0.38;
+            const k = Math.min(1, radius / dist);
+            let x = (dx * k) / radius, y = (dy * k) / radius;
+            updateKnobVisual(el, x, y);
+            const gain = sens * settings.stickSens;
+            x = clamp(x * gain, -1, 1); y = clamp(y * gain, -1, 1);
+            if (raf) cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => { raf = null; write(x, y); sendBinaryState(); });
+        };
+
+        const end = e => {
+            if (e) { if (pointerId !== e.pointerId) return; }
+            pointerId = null;
+            heldInputs.delete(end);
+            if (raf) { cancelAnimationFrame(raf); raf = null; }
+            const gyroOwns = (side === "R" && state.gyroModeIndex === 2) || (side === "L" && state.gyroModeIndex === 1);
+            if (!gyroOwns) { updateKnobVisual(el, 0, 0); write(0, 0); }
+            sendBinaryState(true);
+        };
+
+        el.addEventListener("pointerdown", e => {
+            if (editing) return;
+            e.preventDefault();
+            if (pointerId !== null) end();
+            pointerId = e.pointerId;
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+            heldInputs.add(end);
+            move(e);
+        });
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerup", end);
+        el.addEventListener("pointercancel", end);
+        el.addEventListener("lostpointercapture", end);
+    }
+
+    function bindTouchpad(el, c) {
+        let pointerId = null, lastX = 0, lastY = 0, startX = 0, startY = 0, startT = 0, moved = false;
+        let accX = 0, accY = 0, raf = null;
+
+        const flush = () => {
+            raf = null;
+            const dx = Math.round(accX), dy = Math.round(accY);
+            if (dx || dy) { accX -= dx; accY -= dy; wsSendJson({ type: "mouse_move", dx, dy }); }
+        };
+        const end = e => {
+            if (e && pointerId !== e.pointerId) return;
+            if (pointerId !== null && !moved && performance.now() - startT < 250) {
+                wsSendJson({ type: "mouse_button", button: "left", pressed: true });
+                setTimeout(() => wsSendJson({ type: "mouse_button", button: "left", pressed: false }), 40);
+                Haptics.tick();
+            }
+            pointerId = null;
+            heldInputs.delete(end);
+            el.classList.remove("pressed");
+        };
+        el.addEventListener("pointerdown", e => {
+            if (editing || pointerId !== null) return;
+            e.preventDefault(); e.stopPropagation();
+            pointerId = e.pointerId;
+            try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+            heldInputs.add(end);
+            lastX = startX = e.clientX; lastY = startY = e.clientY;
+            startT = performance.now(); moved = false;
+            el.classList.add("pressed");
+        });
+        el.addEventListener("pointermove", e => {
+            if (pointerId !== e.pointerId) return;
+            e.preventDefault();
+            if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) moved = true;
+            const k = 1.6 * settings.mouseSens * (c.sens ?? 1);
+            accX += (e.clientX - lastX) * k; accY += (e.clientY - lastY) * k;
+            lastX = e.clientX; lastY = e.clientY;
+            if (!raf) raf = requestAnimationFrame(flush);
+        });
+        el.addEventListener("pointerup", end);
+        el.addEventListener("pointercancel", end);
+        el.addEventListener("lostpointercapture", end);
+    }
+
+    // PC keyboard shortcuts for testing the page on a desktop
+    const keyMap = { w: "DPAD_UP", s: "DPAD_DOWN", a: "DPAD_LEFT", d: "DPAD_RIGHT", " ": "A", e: "B", q: "X", r: "Y", Shift: "LB", Control: "RB",
+                     ArrowUp: "DPAD_UP", ArrowDown: "DPAD_DOWN", ArrowLeft: "DPAD_LEFT", ArrowRight: "DPAD_RIGHT" };
+    const activeKeys = new Set();
+    addEventListener("keydown", e => {
+        if (editing || e.repeat || !keyMap[e.key] || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+        activeKeys.add(e.key);
+        inputDown(keyMap[e.key]);
+    });
+    addEventListener("keyup", e => {
+        if (!activeKeys.has(e.key)) return;
+        activeKeys.delete(e.key);
+        inputUp(keyMap[e.key]);
+    });
+    addEventListener("contextmenu", e => e.preventDefault());
+
+    // ================================================================ LAYOUT MANAGER
+    const LS_CUSTOM = "controw-layouts-v2";
+    const LS_CUSTOM_V1 = "controw-custom-layouts";
+    const LS_ACTIVE = "controw-active-layout";
+
+    let customLayouts = [];
+    let active = null;        // layout currently shown
+    let editing = null;       // editor session
+
+    function loadCustomLayouts() {
+        customLayouts = [];
+        try {
+            let raw = localStorage.getItem(LS_CUSTOM);
+            if (raw === null) raw = localStorage.getItem(LS_CUSTOM_V1);   // one-time migration
+            const arr = JSON.parse(raw || "[]");
+            if (Array.isArray(arr)) customLayouts = arr.map(sanitizeLayout).filter(Boolean);
+        } catch (e) {}
+    }
+    function saveCustomLayouts() {
+        try { localStorage.setItem(LS_CUSTOM, JSON.stringify(customLayouts)); }
+        catch (e) { toast("Could not save (storage blocked)"); }
+    }
+
+    function showLayout(layout, remember = true) {
+        active = layout;
+        applyTheme(layout);
+        renderLayout(layout);
+        $("#themeLabel").textContent = layout.name;
+        if (remember) { try { localStorage.setItem(LS_ACTIVE, layout.id); } catch (e) {} }
+        requestAnimationFrame(positionPlayerPill);
+    }
+
+    function findLayout(id) { return PRESETS.find(p => p.id === id) || customLayouts.find(l => l.id === id); }
+
+    function restoreLayout() {
+        loadCustomLayouts();
+        let id = null;
+        try { id = localStorage.getItem(LS_ACTIVE); } catch (e) {}
+        showLayout(findLayout(id) || PRESETS[0], false);
+    }
+
+    // ---- menu sheet
+    const sheet = $("#sheet");
+    function openSheet() { renderSheet(); sheet.hidden = false; }
+    function closeSheet() { sheet.hidden = true; $("#ioPanel").hidden = true; }
+    const gyroLabel = () => ["Off", "Left stick", "Right stick"][state.gyroModeIndex] || "Off";
+
+    function renderSheet() {
+        const grid = $("#presetGrid");
+        grid.textContent = "";
+        for (const p of PRESETS) {
+            const b = mkEl("chip" + (active && active.id === p.id ? " active" : ""), "button");
+            b.textContent = p.name;
+            b.addEventListener("click", () => { showLayout(p); closeSheet(); Haptics.tick(); });
+            grid.appendChild(b);
+        }
+        const list = $("#customList");
+        list.textContent = "";
+        if (!customLayouts.length) {
+            const e = mkEl("empty");
+            e.textContent = "No custom layouts yet. Choose a preset you like, then tap \"New layout from current\".";
+            list.appendChild(e);
+        }
+        for (const l of customLayouts) {
+            const row = mkEl("custom-row" + (active && active.id === l.id ? " active" : ""));
+            const nm = mkEl("nm");
+            nm.textContent = l.name;
+            nm.addEventListener("click", () => { showLayout(l); closeSheet(); });
+            row.appendChild(nm);
+            const mk = (txt, cls, fn) => { const b = mkEl("icon " + cls, "button"); b.textContent = txt; b.addEventListener("click", fn); row.appendChild(b); };
+            mk("Edit", "", () => { closeSheet(); startEditing(l); });
+            mk("Copy", "", () => duplicateLayout(l));
+            mk("Share", "", () => exportLayout(l));
+            mk("Delete", "danger", () => deleteLayout(l));
+            list.appendChild(row);
+        }
+        $("#optGyro").textContent = "Gyro: " + gyroLabel();
+        $("#optHaptics").textContent = "Haptics: " + (settings.haptics ? "On" : "Off");
+        const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        $("#optFullscreen").textContent = fs ? "Exit fullscreen" : "Fullscreen";
+        for (const [id, key, val] of [["optStickSens", "stickSens", "optStickSensVal"], ["optGyroSens", "gyroSens", "optGyroSensVal"], ["optMouseSens", "mouseSens", "optMouseSensVal"]]) {
+            $("#" + id).value = Math.round(settings[key] * 100);
+            $("#" + val).textContent = Math.round(settings[key] * 100) + "%";
+        }
+    }
+
+    for (const [id, key, val] of [["optStickSens", "stickSens", "optStickSensVal"], ["optGyroSens", "gyroSens", "optGyroSensVal"], ["optMouseSens", "mouseSens", "optMouseSensVal"]]) {
+        $("#" + id).addEventListener("input", e => {
+            settings[key] = Number(e.target.value) / 100;
+            $("#" + val).textContent = e.target.value + "%";
+            saveSettings();
+        });
+    }
+
+    function duplicateLayout(l) {
+        const copy = cloneLayout(l);
+        copy.id = newLayoutId();
+        copy.name = (l.name + " copy").slice(0, 40);
+        customLayouts.push(sanitizeLayout(copy));
+        saveCustomLayouts();
+        renderSheet();
+    }
+    function deleteLayout(l) {
+        if (!confirm('Delete layout "' + l.name + '"?')) return;
+        customLayouts = customLayouts.filter(x => x.id !== l.id);
+        saveCustomLayouts();
+        if (active && active.id === l.id) showLayout(PRESETS[0]);
+        renderSheet();
+    }
+    function exportLayout(l) {
+        const ta = $("#ioText");
+        ta.value = JSON.stringify(l);
+        $("#ioPanel").hidden = false;
+        $("#ioApply").hidden = true;
+        ta.focus(); ta.select();
+        try {
+            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(ta.value).then(() => toast("Copied to clipboard"), () => {});
+            else if (document.execCommand && document.execCommand("copy")) toast("Copied to clipboard");
+        } catch (e) {}
+    }
+    $("#importBtn").addEventListener("click", () => {
+        $("#ioText").value = "";
+        $("#ioApply").hidden = false;
+        $("#ioPanel").hidden = false;
+        $("#ioText").focus();
+    });
+    $("#ioClose").addEventListener("click", () => { $("#ioPanel").hidden = true; });
+    $("#ioApply").addEventListener("click", () => {
+        try {
+            const l = sanitizeLayout(JSON.parse($("#ioText").value));
+            if (!l || !l.controls.length) throw new Error("bad");
+            l.id = newLayoutId();
+            customLayouts.push(l);
+            saveCustomLayouts();
+            $("#ioPanel").hidden = true;
+            renderSheet();
+            toast('Imported "' + l.name + '"');
+        } catch (e) { toast("That is not a valid layout"); }
+    });
+
+    $("#newLayout").addEventListener("click", () => {
+        closeSheet();
+        const base = cloneLayout(active);
+        base.id = newLayoutId();
+        base.name = active.preset ? (active.name + " custom").slice(0, 40) : "My layout " + (customLayouts.length + 1);
+        delete base.preset;
+        startEditing(base);
+    });
+
+    $("#themeSwitcher").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); openSheet(); });
+    $("#sheetClose").addEventListener("click", closeSheet);
+    sheet.addEventListener("pointerdown", e => { if (e.target === sheet) closeSheet(); });
+
+    $("#optGyro").addEventListener("click", async () => { await cycleGyroMode(); renderSheet(); });
+    $("#optHaptics").addEventListener("click", () => {
+        settings.haptics = !settings.haptics;
+        saveSettings();
+        if (!settings.haptics) stopGameRumble();
+        renderSheet();
+    });
+    $("#optFullscreen").addEventListener("click", () => {
+        if (document.fullscreenElement || document.webkitFullscreenElement) exitFullscreenMode(); else requestFullscreenMode();
+        setTimeout(renderSheet, 300);
+    });
+    $("#optReconnect").addEventListener("click", () => { forceReconnect(); toast("Reconnecting..."); closeSheet(); });
+
+    // ---- editor
+    const bar = $("#editorBar");
+    const edName = $("#edName"), edSize = $("#edSize"), edOpacity = $("#edOpacity"), edTheme = $("#edTheme"), edAdd = $("#edAdd");
+
+    for (const [id, name] of THEMES) { const o = document.createElement("option"); o.value = id; o.textContent = "Theme: " + name; edTheme.appendChild(o); }
+
+    function addGroup(select, label, items) {
+        const g = document.createElement("optgroup");
+        g.label = label;
+        for (const [v, t] of items) { const o = document.createElement("option"); o.value = v; o.textContent = t; g.appendChild(o); }
+        select.appendChild(g);
+    }
+    (function buildAddMenu() {
+        const ph = document.createElement("option");
+        ph.value = ""; ph.textContent = "+ Add control...";
+        edAdd.appendChild(ph);
+        addGroup(edAdd, "Sticks & pads", [["dpad", "D-pad"], ["L", "Left stick"], ["R", "Right stick"], ["tp", "Touchpad (mouse)"]]);
+        addGroup(edAdd, "Button groups", Object.keys(FACE).map(k => ["face:" + k, FACE_NAMES[k]]));
+        addGroup(edAdd, "Gamepad buttons", GAMEPAD_MAPS.map(m => ["b:" + m, mapDisplayName(m)]));
+        addGroup(edAdd, "Keyboard keys", [...SPECIAL_KEYS, ...LETTER_KEYS].map(k => ["b:KEY:" + k, "Key: " + (KEY_LABELS[k] || k.toUpperCase())]));
+        addGroup(edAdd, "Mouse buttons", MOUSE_BTNS.map(m => ["b:MOUSE:" + m, "Mouse: " + MOUSE_LABELS[m]]));
+    })();
+
+    function mapSelect(current, onChange) {
+        const s = document.createElement("select");
+        addGroup(s, "Gamepad", GAMEPAD_MAPS.map(m => [m, mapDisplayName(m)]));
+        addGroup(s, "Keyboard", [...SPECIAL_KEYS, ...LETTER_KEYS].map(k => ["KEY:" + k, "Key: " + (KEY_LABELS[k] || k.toUpperCase())]));
+        addGroup(s, "Mouse", MOUSE_BTNS.map(m => ["MOUSE:" + m, "Mouse: " + MOUSE_LABELS[m]]));
+        s.value = current;
+        s.addEventListener("change", () => onChange(s.value));
+        return s;
+    }
+
+    // undo history
+    const undoStack = [];
+    function pushUndo() {
+        if (!editing) return;
+        undoStack.push(cloneLayout(editing.layout));
+        if (undoStack.length > 60) undoStack.shift();
+        $("#edUndo").disabled = false;
+    }
+
+    function startEditing(source) {
+        releaseAllHeldInputs();
+        const working = sanitizeLayout(source) || cloneLayout(PRESETS[0]);
+        working.id = source.id;
+        editing = { layout: working, original: cloneLayout(working), returnTo: active, selected: null, snap: true, drag: null };
+        undoStack.length = 0;
+        $("#edUndo").disabled = true;
+        document.body.classList.add("editing");
+        bar.hidden = false;
+        bar.classList.remove("collapsed");
+        edName.value = working.name;
+        edTheme.value = working.theme;
+        edOpacity.value = Math.round(working.opacity * 100);
+        $("#edSnap").classList.add("on");
+        active = working;
+        applyTheme(working);
+        renderLayout(working);
+        selectControl(null);
+    }
+
+    function stopEditing() {
+        editing = null;
+        document.body.classList.remove("editing");
+        bar.hidden = true;
+        bar.classList.remove("dock-bottom");
+    }
+
+    const selectedCtl = () => editing && editing.layout.controls.find(c => c.id === editing.selected);
+
+    function selectControl(id) {
+        if (!editing) return;
+        editing.selected = id;
+        for (const [cid, el] of ctlEls) el.classList.toggle("ctl-selected", cid === id);
+        const c = selectedCtl();
+        $("#edSel").textContent = c ? controlTitle(c) : "Tap a control";
+        for (const k of ["edSize", "edMinus", "edPlus", "edDup", "edDel"]) $("#" + k).disabled = !c;
+        edSize.value = c ? Math.round(c.s * 100) : 100;
+        $("#edSizeVal").textContent = (c ? Math.round(c.s * 100) : 100) + "%";
+        renderProps();
+        if (c) bar.classList.toggle("dock-bottom", c.y < 50);
+    }
+
+    function controlTitle(c) {
+        if (c.type === "button") return mapDisplayName(c.map);
+        if (c.type === "stick") return c.map === "L" ? "Left stick" : "Right stick";
+        if (c.type === "dpad") return "D-pad";
+        if (c.type === "face") return "Button group";
+        return "Touchpad";
+    }
+
+    function mutated(c, rebuild) {
+        if (rebuild) refreshControl(c); else { const el = ctlEls.get(c.id); if (el) placeControl(el, c); }
+    }
+
+    function renderProps() {
+        const box = $("#edProps");
+        box.textContent = "";
+        const c = selectedCtl();
+        if (!c) return;
+        const add = n => box.appendChild(n);
+        const lbl = t => { const s = document.createElement("span"); s.textContent = t; return s; };
+        const chk = (text, val, fn) => {
+            const l = mkEl("chk", "label");
+            const i = document.createElement("input"); i.type = "checkbox"; i.checked = !!val;
+            i.addEventListener("change", () => fn(i.checked));
+            l.append(i, document.createTextNode(text));
+            return l;
+        };
+        const select = (items, cur, fn) => {
+            const s = document.createElement("select");
+            for (const [v, t] of items) { const o = document.createElement("option"); o.value = v; o.textContent = t; s.appendChild(o); }
+            s.value = cur; s.addEventListener("change", () => fn(s.value));
+            return s;
+        };
+        const colorPicker = () => {
+            const i = document.createElement("input"); i.type = "color"; i.value = c.color || "#6e6e6e";
+            i.addEventListener("change", () => { pushUndo(); c.color = i.value; delete c.colors; mutated(c, true); });
+            const x = document.createElement("button"); x.textContent = "Reset colour";
+            x.addEventListener("click", () => { pushUndo(); delete c.color; delete c.colors; mutated(c, true); });
+            return [lbl("Colour"), i, x];
+        };
+        const textBox = (ph, val, fn, short) => {
+            const i = document.createElement("input"); i.type = "text"; i.maxLength = 8; i.placeholder = ph; i.value = val || "";
+            if (short) i.className = "short";
+            i.addEventListener("change", () => { pushUndo(); fn(i.value.trim()); });
+            return i;
+        };
+
+        if (c.type === "button") {
+            add(lbl("Does"));
+            add(mapSelect(c.map, v => { pushUndo(); c.map = v; if (!c.label) delete c.label; mutated(c, true); selectControl(c.id); }));
+            add(textBox("Label", c.label, v => { if (v) c.label = v; else delete c.label; mutated(c, true); }));
+            add(select(SHAPES, c.shape || "round", v => { pushUndo(); c.shape = v; mutated(c, true); }));
+            for (const n of colorPicker()) add(n);
+            add(chk("Turbo", c.turbo, v => { pushUndo(); c.turbo = v; mutated(c, true); }));
+            add(chk("Toggle", c.latch, v => { pushUndo(); c.latch = v; mutated(c, true); }));
+            if (c.map === "LT" || c.map === "RT") {
+                const r = document.createElement("input"); r.type = "range"; r.min = 10; r.max = 100; r.value = c.value ?? 100;
+                r.addEventListener("change", () => { pushUndo(); c.value = Number(r.value); mutated(c, true); });
+                add(lbl("Pull")); add(r);
+            }
+        } else if (c.type === "face") {
+            add(lbl("Preset"));
+            add(select([["", "Choose..."], ...Object.keys(FACE).map(k => [k, FACE_NAMES[k]])], "", v => {
+                if (!v) return;
+                pushUndo();
+                const f = FACE[v];
+                c.style = f.style; c.maps = f.maps.slice();
+                if (f.labels) c.labels = f.labels.slice(); else delete c.labels;
+                if (f.colors) c.colors = f.colors.slice(); else delete c.colors;
+                delete c.color;
+                mutated(c, true); selectControl(c.id);
+            }));
+            add(select(FACE_STYLES, c.style, v => {
+                pushUndo();
+                if ((v === "diamond" || v === "gc") && c.maps.length !== 4) { toast("That arrangement needs exactly 4 buttons"); selectControl(c.id); return; }
+                c.style = v; mutated(c, true);
+            }));
+            add(select(SHAPES, c.shape || "round", v => { pushUndo(); c.shape = v; mutated(c, true); }));
+            for (const n of colorPicker()) add(n);
+            add(chk("Turbo", c.turbo, v => { pushUndo(); c.turbo = v; mutated(c, true); }));
+            add(chk("Toggle", c.latch, v => { pushUndo(); c.latch = v; mutated(c, true); }));
+            const un = document.createElement("button");
+            un.textContent = "Split into buttons";
+            un.addEventListener("click", () => ungroupFace(c));
+            add(un);
+        } else if (c.type === "stick") {
+            add(lbl("Stick"));
+            add(select([["L", "Left"], ["R", "Right"]], c.map, v => { pushUndo(); c.map = v; mutated(c, true); selectControl(c.id); }));
+            for (const n of colorPicker()) add(n);
+            const r = document.createElement("input"); r.type = "range"; r.min = 40; r.max = 250; r.value = Math.round((c.sens ?? 1) * 100);
+            r.addEventListener("change", () => { pushUndo(); c.sens = Number(r.value) / 100; });
+            add(lbl("Sensitivity")); add(r);
+        } else if (c.type === "touchpad") {
+            add(textBox("Label", c.label, v => { if (v) c.label = v; else delete c.label; mutated(c, true); }));
+            const r = document.createElement("input"); r.type = "range"; r.min = 40; r.max = 300; r.value = Math.round((c.sens ?? 1) * 100);
+            r.addEventListener("change", () => { pushUndo(); c.sens = Number(r.value) / 100; });
+            add(lbl("Speed")); add(r);
+            add(lbl("Drag = move mouse, tap = left click"));
+        } else {
+            add(lbl("The D-pad has no extra options. Add single D-pad buttons from the Add menu."));
+        }
+    }
+
+    function ungroupFace(c) {
+        pushUndo();
+        const el = ctlEls.get(c.id);
+        const kids = [...el.querySelectorAll(".fbtn")];
+        const sr = stage.getBoundingClientRect();
+        const list = editing.layout.controls;
+        const idx = list.indexOf(c);
+        const fresh = kids.map((k, i) => {
+            const r = k.getBoundingClientRect();
+            const n = {
+                id: newCid(), type: "button", map: c.maps[i],
+                x: round1(clamp(((r.left + r.width / 2) - sr.left) / sr.width * 100, 0, 100)),
+                y: round1(clamp(((r.top + r.height / 2) - sr.top) / sr.height * 100, 0, 100)),
+            };
+            // size: ratio of the real rendered button to a standard (15u) button
+            const probe = mkEl("ctl cbtn");
+            probe.style.visibility = "hidden";
+            layer.appendChild(probe);
+            n.s = Math.round(clamp(r.width / probe.offsetWidth, 0.35, 3.2) * 100) / 100;
+            probe.remove();
+            if (c.labels && c.labels[i]) n.label = c.labels[i];
+            const col = (c.colors && c.colors[i]) || c.color;
+            if (col) n.color = col;
+            if (c.shape) n.shape = c.shape;
+            if (c.turbo) n.turbo = true;
+            if (c.latch) n.latch = true;
+            return n;
+        });
+        list.splice(idx, 1, ...fresh);
+        el.remove();
+        ctlEls.delete(c.id);
+        for (const n of fresh) { const e = buildControl(n); layer.appendChild(e); ctlEls.set(n.id, e); }
+        selectControl(fresh[0] ? fresh[0].id : null);
+    }
+
+    function setSelectedScale(pct) {
+        const c = selectedCtl();
+        if (!c) return;
+        c.s = Math.round(clamp(pct, 35, 320)) / 100;
+        mutated(c, false);
+        edSize.value = Math.round(c.s * 100);
+        $("#edSizeVal").textContent = Math.round(c.s * 100) + "%";
+    }
+    edSize.addEventListener("pointerdown", pushUndo);
+    edSize.addEventListener("input", () => setSelectedScale(Number(edSize.value)));
+    $("#edMinus").addEventListener("click", () => { pushUndo(); setSelectedScale(Number(edSize.value) - 5); });
+    $("#edPlus").addEventListener("click", () => { pushUndo(); setSelectedScale(Number(edSize.value) + 5); });
+
+    $("#edDel").addEventListener("click", () => {
+        const c = selectedCtl();
+        if (!c) return;
+        pushUndo();
+        editing.layout.controls = editing.layout.controls.filter(x => x.id !== c.id);
+        ctlEls.get(c.id)?.remove();
+        ctlEls.delete(c.id);
+        selectControl(null);
+    });
+    $("#edDup").addEventListener("click", () => {
+        const c = selectedCtl();
+        if (!c) return;
+        pushUndo();
+        const copy = cloneLayout(c);
+        copy.id = newCid();
+        copy.x = round1(clamp(c.x + 5, 0, 100));
+        copy.y = round1(clamp(c.y + 6, 0, 100));
+        editing.layout.controls.push(copy);
+        const el = buildControl(copy);
+        layer.appendChild(el);
+        ctlEls.set(copy.id, el);
+        selectControl(copy.id);
+    });
+
+    edAdd.addEventListener("change", () => {
+        const v = edAdd.value;
+        edAdd.value = "";
+        if (!v || !editing) return;
+        pushUndo();
+        const kind = v.startsWith("b:") ? v.slice(2) : v;
+        const c = makeControl(kind, 50, 50, 1);
+        // nudge so stacked additions stay individually grabbable
+        const n = editing.layout.controls.filter(x => Math.abs(x.x - 50) < 8 && Math.abs(x.y - 50) < 8).length;
+        c.x = round1(50 + n * 3); c.y = round1(50 + n * 4);
+        editing.layout.controls.push(c);
+        const el = buildControl(c);
+        layer.appendChild(el);
+        ctlEls.set(c.id, el);
+        selectControl(c.id);
+    });
+
+    $("#edUndo").addEventListener("click", () => {
+        if (!editing || !undoStack.length) return;
+        const prev = undoStack.pop();
+        const keepSel = editing.selected;
+        editing.layout = prev;
+        active = prev;
+        edName.value = prev.name;
+        edTheme.value = prev.theme;
+        edOpacity.value = Math.round(prev.opacity * 100);
+        applyTheme(prev);
+        renderLayout(prev);
+        selectControl(prev.controls.some(c => c.id === keepSel) ? keepSel : null);
+        $("#edUndo").disabled = undoStack.length === 0;
+    });
+
+    $("#edSnap").addEventListener("click", e => { editing.snap = !editing.snap; e.currentTarget.classList.toggle("on", editing.snap); });
+    $("#edCollapse").addEventListener("click", () => bar.classList.toggle("collapsed"));
+    edTheme.addEventListener("change", () => { pushUndo(); editing.layout.theme = edTheme.value; applyTheme(editing.layout); });
+    edOpacity.addEventListener("pointerdown", pushUndo);
+    edOpacity.addEventListener("input", () => {
+        editing.layout.opacity = clamp(Number(edOpacity.value) / 100, 0.25, 1);
+        stage.style.setProperty("--ui-opacity", String(editing.layout.opacity));
+    });
+    edName.addEventListener("input", () => { editing.layout.name = edName.value.slice(0, 40); });
+
+    $("#edCancel").addEventListener("click", () => {
+        const back = editing.returnTo;
+        stopEditing();
+        showLayout(back || PRESETS[0], false);
+    });
+
+    $("#edSave").addEventListener("click", () => {
+        const l = sanitizeLayout(editing.layout);
+        l.id = editing.layout.id;
+        l.name = (edName.value.trim() || "My layout").slice(0, 40);
+        const i = customLayouts.findIndex(x => x.id === l.id);
+        if (i >= 0) customLayouts[i] = l; else customLayouts.push(l);
+        saveCustomLayouts();
+        stopEditing();
+        showLayout(l);
+        toast('Saved "' + l.name + '"');
+    });
+
+    // Dragging controls. They ignore pointer events while editing, so hit
+    // testing is done by hand against their on-screen rectangles.
+    function hitTest(x, y) {
+        let best = null, bestArea = Infinity;
+        for (const c of editing.layout.controls) {
+            const el = ctlEls.get(c.id);
+            if (!el) continue;
+            const r = el.getBoundingClientRect();
+            if (x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6) {
+                const area = r.width * r.height;
+                if (area < bestArea) { best = c; bestArea = area; }
+            }
+        }
+        return best;
+    }
+
+    stage.addEventListener("pointerdown", e => {
+        if (!editing) return;
+        e.preventDefault();
+        const c = hitTest(e.clientX, e.clientY);
+        if (!c) { selectControl(null); return; }
+        if (editing.selected !== c.id) selectControl(c.id);
+        pushUndo();
+        const sr = stage.getBoundingClientRect();
+        editing.drag = {
+            pointerId: e.pointerId, moved: false,
+            ox: e.clientX - (sr.left + c.x / 100 * sr.width),
+            oy: e.clientY - (sr.top + c.y / 100 * sr.height),
+        };
+        try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    stage.addEventListener("pointermove", e => {
+        if (!editing || !editing.drag || editing.drag.pointerId !== e.pointerId) return;
+        e.preventDefault();
+        const c = selectedCtl();
+        if (!c) return;
+        const sr = stage.getBoundingClientRect();
+        let x = (e.clientX - editing.drag.ox - sr.left) / sr.width * 100;
+        let y = (e.clientY - editing.drag.oy - sr.top) / sr.height * 100;
+        if (editing.snap) { x = Math.round(x / 2.5) * 2.5; y = Math.round(y / 2.5) * 2.5; }
+        c.x = round1(clamp(x, 0, 100));
+        c.y = round1(clamp(y, 0, 100));
+        editing.drag.moved = true;
+        mutated(c, false);
+    });
+    const endDrag = e => {
+        if (!editing || !editing.drag || editing.drag.pointerId !== e.pointerId) return;
+        if (!editing.drag.moved && undoStack.length) undoStack.pop();    // a plain tap changed nothing
+        $("#edUndo").disabled = undoStack.length === 0;
+        const c = selectedCtl();
+        if (c) bar.classList.toggle("dock-bottom", c.y < 50);
+        editing.drag = null;
+    };
+    stage.addEventListener("pointerup", endDrag);
+    stage.addEventListener("pointercancel", endDrag);
+
+    // ------------------------------------------------------------- dev helpers
+    // window.__layoutAudit(): reports overlapping / off-screen controls for every
+    // preset at the current window size.
+    window.__layoutAudit = async () => {
+        const out = [];
+        const saved = active;
+        for (const p of PRESETS) {
+            showLayout(p, false);
+            await new Promise(r => setTimeout(r, 30));
+            const items = [];
+            for (const c of p.controls) {
+                const el = ctlEls.get(c.id);
+                if (!el) continue;
+                if (c.type === "face" && (c.style === "row" || c.style === "grid")) {
+                    // children are tighter than the box; use the box
+                }
+                items.push([c, el.getBoundingClientRect()]);
+            }
+            const menu = $("#themeSwitcher").getBoundingClientRect();
+            const issues = [];
+            const nm = c => (c.map ? c.type + ":" + c.map : c.type) + (c.type === "face" ? "(" + c.maps.join("") + ")" : "");
+            for (let i = 0; i < items.length; i++) {
+                const [a, A] = items[i];
+                if (A.left < -1 || A.top < -1 || A.right > innerWidth + 1 || A.bottom > innerHeight + 1) issues.push("OOB " + nm(a));
+                if (rectsOverlap(A, menu, -2)) issues.push("MENU overlaps " + nm(a));
+                for (let j = i + 1; j < items.length; j++) {
+                    const [b, B] = items[j];
+                    if (rectsOverlap(A, B, -3)) issues.push(nm(a) + " x " + nm(b));
+                }
+            }
+            if (issues.length) out.push(p.name + ": " + issues.join("; "));
+        }
+        showLayout(saved, false);
+        return out;
+    };
+    window.__presets = PRESETS;
+
+    window.controllerDiagnostics = () => ({
+        playerId: state.playerId, connected: state.connected,
+        gyro: { enabled: state.gyroEnabled, ready: state.gyroReady, source: state.gyroSensorSource },
+        packetSeq: state.packetSeq, lastInputMs: Math.round(performance.now() - state.lastInputAt),
+        reconnectDelayMs: Math.round(state.reconnectDelay),
+    });
+
+    // -------------------------------------------------------------------- init
+    restoreLayout();
+    updatePillLabel();
+    handleOrientationChange();
+    connect();
+})();
+</script>
+</body>
+</html>

@@ -105,3 +105,14 @@ This project is intended for use on a trusted local network.
 ---
 
 Made for quick local multiplayer, couch gaming, and turning whatever phone is nearby into a controller.
+
+## Custom layout maker
+Tap the menu button at the top of the controller to open the menu:
+- **Presets**: pick any built-in layout.
+- **+ New layout from current**: starts the editor from whatever layout is showing. Drag controls to move them, use the size slider or +/- to resize, hide controls you don't need (and bring them back from the tray), toggle Snap/Glass, and set opacity. Save to keep it.
+- **My layouts**: apply, edit, copy, delete or share (export/import as JSON text) your saved layouts. They are stored in the phone's browser.
+- **Options**: gyro mode, haptics on/off, fullscreen, and a manual Reconnect.
+
+## Reliability notes
+- Very short taps are held for ~55 ms on the wire so games polling once per frame never miss them.
+- A phone that reconnects keeps its player slot (per-tab client id), and the page rebuilds its connection immediately when returning from the background.
